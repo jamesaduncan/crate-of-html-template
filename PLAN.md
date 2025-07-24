@@ -382,13 +382,13 @@ pub trait ElementHandler: Send + Sync {
 
 ### Phase 8: Testing and Documentation
 
-- [ ] **8.1 Test Utilities**
-  - [ ] Create `src/test_utils.rs`
-  - [ ] Implement `assert_html_eq`
-  - [ ] Implement `normalize_html`
-  - [ ] Add HTML comparison helpers
-  - [ ] Export as public module
-  - [ ] Write tests for utilities
+- [x] **8.1 Test Utilities**
+  - [x] Create `src/test_utils.rs`
+  - [x] Implement `assert_html_eq`
+  - [x] Implement `normalize_html`
+  - [x] Add HTML comparison helpers
+  - [x] Export as public module
+  - [x] Write tests for utilities
 
 - [ ] **8.2 Unit Tests**
   - [ ] Achieve >90% code coverage
@@ -456,8 +456,8 @@ The recommended order for implementation:
 Current Status:
 - **Started**: 2025-07-24
 - **Current Phase**: Phase 8 Testing and Documentation
-- **Last Completed Phase**: Phase 7 Element Handlers (Complete)
-- **Next Task**: 8.1 Test Utilities
+- **Last Completed Task**: 8.1 Test Utilities (Complete)
+- **Next Task**: 8.2 Unit Tests
 - **Blockers**: 
   - Memory safety issue with global cache in template compilation (tracked separately)
   - Array content rendering in cross-document scenarios has known issues
@@ -471,6 +471,22 @@ Current Status:
 - ✅ Phase 5: Performance Optimizations (Streaming, Zero-copy, Caching)
 - ✅ Phase 6: API Surface (Builder Pattern, Direct Constructors, Public API)
 - ✅ Phase 7: Element Handlers (Built-in and Custom Handler Support)
+
+### Implementation Notes from Phase 8.1 (Complete):
+
+#### Test Utilities:
+- Created comprehensive `src/test_utils.rs` module with testing helpers
+- Implemented `normalize_html()` function using dom_query for consistent HTML comparison
+- Created `assert_html_eq!` macro for HTML structure assertions with detailed error messages
+- Added text extraction utilities:
+  - `extract_text()` - Extracts all text content with whitespace normalization
+  - `extract_text_by_selector()` - Extracts text from specific elements
+- Added attribute extraction: `extract_attrs_by_selector()` for testing attribute values
+- Created element query functions: `count_elements()` and `has_element()`
+- Helper functions for test HTML creation: `test_html()` and `test_html_with_root()`
+- All utilities handle dom_query's automatic html/head/body wrapper correctly
+- Full test coverage for all utility functions
+- Exported as public module for use in integration tests
 
 ### Implementation Notes from Phase 7 (Complete):
 

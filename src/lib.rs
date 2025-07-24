@@ -146,6 +146,7 @@ pub mod streaming;
 pub mod cache;
 pub mod cross_document;
 pub mod builder;
+pub mod test_utils;
 
 // Internal modules - implementation details, may change without notice
 #[doc(hidden)]
