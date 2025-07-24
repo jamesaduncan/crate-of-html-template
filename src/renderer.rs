@@ -1,27 +1,24 @@
 //! Template rendering engine
-//! 
+//!
 //! This module implements the core rendering functionality that takes compiled
 //! templates and binds data to them, producing final HTML output.
 
 use std::borrow::Cow;
-use std::sync::Arc;
 
 use dom_query::{Document, Selection};
-use regex::Regex;
 use once_cell::sync::Lazy;
+use regex::Regex;
 
+use crate::constraints::{ConstraintContext, ConstraintEvaluator};
 use crate::error::{Error, Result};
-use crate::types::*;
-use crate::value::RenderValue;
 use crate::handlers::ElementHandler;
 use crate::node_ext::NodeExt;
-use crate::constraints::{ConstraintContext, ConstraintEvaluator};
+use crate::types::*;
 use crate::utils::{replace_multiple_cow, split_path_cow};
-use crate::cache::get_global_cache;
+use crate::value::RenderValue;
 
-static VARIABLE_REGEX: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"\$\{([^}]+)\}").expect("Invalid variable regex")
-});
+static VARIABLE_REGEX: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"\$\{([^}]+)\}").expect("Invalid variable regex"));
 
 /// The main renderer that binds data to templates
 pub struct Renderer<'a> {
@@ -32,8 +29,8 @@ pub struct Renderer<'a> {
 impl<'a> Renderer<'a> {
     /// Create a new renderer for the given template
     pub fn new(
-        template: &'a CompiledTemplate, 
-        handlers: &'a std::collections::HashMap<String, Box<dyn ElementHandler>>
+        template: &'a CompiledTemplate,
+        handlers: &'a std::collections::HashMap<String, Box<dyn ElementHandler>>,
     ) -> Self {
         Self { template, handlers }
     }
@@ -42,7 +39,7 @@ impl<'a> Renderer<'a> {
     pub fn render(&self, data: &dyn RenderValue) -> Result<String> {
         // Parse the template HTML to create a working document
         let doc = Document::from(self.template.template_html.as_ref());
-        
+
         // Apply the root selector if specified
         let root = if let Some(ref selector) = self.template.root_selector {
             doc.select(selector)
@@ -63,16 +60,25 @@ impl<'a> Renderer<'a> {
 
         // Keep track of which elements have been processed to avoid duplicates
         let mut processed_selectors = std::collections::HashSet::new();
-        
+
         // Process each template element
         for element_def in &self.template.elements {
             if !processed_selectors.contains(&element_def.selector) {
-                self.render_element_with_context(&doc, &root, element_def, data, &mut processed_selectors)?;
+                self.render_element_with_context(
+                    &doc,
+                    &root,
+                    element_def,
+                    data,
+                    &mut processed_selectors,
+                )?;
             }
         }
 
         // Apply constraints if any
         self.apply_constraints(&doc, &root, data)?;
+
+        // Also apply inline data-constraint attributes
+        self.apply_inline_constraints(&root, data)?;
 
         // Return the rendered HTML
         Ok(self.serialize_selection(&root))
@@ -91,7 +97,7 @@ impl<'a> Renderer<'a> {
         processed_selectors.insert(element_def.selector.clone());
         self.render_element(doc, root, element_def, data)
     }
-    
+
     /// Render a single template element
     fn render_element(
         &self,
@@ -101,10 +107,10 @@ impl<'a> Renderer<'a> {
         data: &dyn RenderValue,
     ) -> Result<()> {
         // Find the element(s) matching the selector
-        
+
         // We need to check both the root elements themselves and their descendants
         let mut matching_elements = Vec::new();
-        
+
         // First check if any root elements match
         // We'll use the is() method to check if elements match
         for node in root.nodes() {
@@ -114,14 +120,13 @@ impl<'a> Renderer<'a> {
                 matching_elements.push(node.clone());
             }
         }
-        
+
         // Then search descendants
         let descendant_elements = root.select(&element_def.selector);
         for node in descendant_elements.nodes() {
             matching_elements.push(node.clone());
         }
-        
-        
+
         if matching_elements.is_empty() {
             // Element not found - this might be ok for optional elements
             return Ok(());
@@ -152,10 +157,12 @@ impl<'a> Renderer<'a> {
         // Determine the data context for this element
         let element_data = if element_def.is_scope {
             // For itemscope elements, extract the property value as the new context
-            let prop_name = element_def.properties.first()
+            let prop_name = element_def
+                .properties
+                .first()
                 .map(|p| &p.name)
                 .ok_or_else(|| Error::render_static("Itemscope element missing property name"))?;
-            
+
             // Get the nested data object
             if let Some(nested_value) = data.get_value(&[prop_name.clone()]) {
                 // Use the nested object as the new data context
@@ -172,7 +179,11 @@ impl<'a> Renderer<'a> {
         let tag_name = element.node_name();
         let skip_property_application = if let Some(tag) = &tag_name {
             // For select elements, skip text content property application as the handler will manage it
-            tag.to_lowercase() == "select" && element_def.properties.iter().any(|p| matches!(p.target, PropertyTarget::TextContent))
+            tag.to_lowercase() == "select"
+                && element_def
+                    .properties
+                    .iter()
+                    .any(|p| matches!(p.target, PropertyTarget::TextContent))
         } else {
             false
         };
@@ -180,7 +191,7 @@ impl<'a> Renderer<'a> {
         // Apply properties to the element
         if !skip_property_application {
             for property in &element_def.properties {
-                // Skip text content property for itemscope elements 
+                // Skip text content property for itemscope elements
                 // (they don't render their property value as text)
                 if element_def.is_scope && matches!(property.target, PropertyTarget::TextContent) {
                     continue;
@@ -208,7 +219,7 @@ impl<'a> Renderer<'a> {
                 }
             }
         }
-        
+
         // If this is a scope element, render its children with the scoped data
         if element_def.is_scope {
             self.render_scoped_children(element, element_data)?;
@@ -227,19 +238,15 @@ impl<'a> Renderer<'a> {
         // Get the current content to process variables
         let current_content = match &property.target {
             PropertyTarget::TextContent => element.text(),
-            PropertyTarget::Attribute(attr_name) => {
-                element.attr(attr_name).unwrap_or_default()
-            }
-            PropertyTarget::Value => {
-                element.attr("value").unwrap_or_default()
-            }
+            PropertyTarget::Attribute(attr_name) => element.attr(attr_name).unwrap_or_default(),
+            PropertyTarget::Value => element.attr("value").unwrap_or_default(),
         };
-        
+
         // Process the content with variable substitution
         let value = if property.variables.is_empty() {
             // No variables, use the property name directly
             data.get_property(&[property.name.clone()])
-                .unwrap_or_else(|| Cow::Borrowed(""))
+                .unwrap_or(Cow::Borrowed(""))
         } else {
             // Process variables in the current content
             self.process_variables_in_text(&current_content, &property.variables, data)?
@@ -273,28 +280,34 @@ impl<'a> Renderer<'a> {
         if variables.is_empty() {
             return Ok(Cow::Borrowed(""));
         }
-        
+
         // If text is empty and we have one variable, it's an implicit binding
         if text.is_empty() && variables.len() == 1 {
             let var = &variables[0];
-            return Ok(data.get_property(&var.path).unwrap_or_else(|| Cow::Borrowed("")));
+            return Ok(data
+                .get_property(&var.path)
+                .unwrap_or(Cow::Borrowed("")));
         }
-        
+
         // If there's only one variable and it's the entire text, return just the value
         if variables.len() == 1 && variables[0].raw == text {
             let var = &variables[0];
-            return Ok(data.get_property(&var.path).unwrap_or_else(|| Cow::Borrowed("")));
+            return Ok(data
+                .get_property(&var.path)
+                .unwrap_or(Cow::Borrowed("")));
         }
-        
+
         // Use zero-copy replacement for multiple variables
-        let replacements: Vec<(String, Cow<str>)> = variables.iter()
+        let replacements: Vec<(String, Cow<str>)> = variables
+            .iter()
             .map(|var| {
-                let value = data.get_property(&var.path)
-                    .unwrap_or_else(|| Cow::Borrowed(""));
+                let value = data
+                    .get_property(&var.path)
+                    .unwrap_or(Cow::Borrowed(""));
                 (var.raw.clone(), value)
             })
             .collect();
-        
+
         Ok(replace_multiple_cow(text, &replacements))
     }
 
@@ -311,10 +324,10 @@ impl<'a> Renderer<'a> {
         } else {
             &element_def.properties[0].name
         };
-        
+
         // Get the array value using the property name
         let array_value = data.get_value(&[array_prop_name.clone()]);
-        
+
         // Check if we have array data and get the items
         let array_items = if let Some(arr_val) = array_value {
             if let Some(items) = arr_val.as_array() {
@@ -330,7 +343,7 @@ impl<'a> Renderer<'a> {
             }
             return Ok(());
         };
-        
+
         // If no items, remove the template elements
         if array_items.is_empty() {
             for element in elements.nodes() {
@@ -338,7 +351,7 @@ impl<'a> Renderer<'a> {
             }
             return Ok(());
         }
-        
+
         // Process each element that needs array rendering
         for element in elements.nodes() {
             // Get the parent element
@@ -347,54 +360,54 @@ impl<'a> Renderer<'a> {
                 continue;
             }
             let parent_node = parent.unwrap();
-            
+
             // Store the template HTML
             let template_html = element.html();
-            
+
             // Create a non-array version of the element definition
             let mut item_element_def = element_def.clone();
             item_element_def.is_array = false;
-            
+
             // For each array item, create a new element from the template HTML
             for item in array_items.iter() {
                 // Parse the template HTML to create a new element
                 let item_doc = Document::from(template_html.as_ref());
-                
+
                 // We need to render all elements within this cloned item
                 // Get the root element
                 let item_root = item_doc.select(":root > *");
-                
+
                 // Process all template elements (except arrays) within this item
                 for element_to_render in &self.template.elements {
                     // Skip array elements - we're already rendering the array item
                     if element_to_render.is_array {
                         continue;
                     }
-                    
+
                     // Use render_element which handles finding and rendering
                     self.render_element(&item_doc, &item_root, element_to_render, *item)?;
                 }
-                
+
                 // For array items, process the article element itself with variables
                 // The article element contains ${age} in its text
                 let article_elements = item_doc.select(&element_def.selector);
                 for article in article_elements.nodes() {
                     self.render_single_element(article, &item_element_def, *item)?;
                 }
-                
+
                 // Also process any text nodes with variables that don't have itemprop
                 // This handles cases like <p>Age: ${age}</p>
                 self.process_variables_in_dom(&item_doc, &item_root, *item)?;
-                
+
                 // Append the fully rendered item HTML to the parent
                 let rendered_html = item_root.html();
                 parent_node.append_html(rendered_html);
             }
-            
+
             // Remove the original template element
             element.remove_from_parent();
         }
-        
+
         Ok(())
     }
 
@@ -408,18 +421,18 @@ impl<'a> Renderer<'a> {
         // Create constraint context
         let context = ConstraintContext::new(data);
         let evaluator = ConstraintEvaluator::new();
-        
+
         // TODO: Implement @id registration with proper lifetime management
         // For now, we'll skip this and only support direct property constraints
-        
+
         // Evaluate constraints
         for constraint in &self.template.constraints {
             // Find elements matching the constraint selector
             let constrained_elements = root.select(&constraint.element_selector);
-            
+
             // Check if constraint is satisfied
             let should_show = evaluator.should_render(constraint, &context)?;
-            
+
             // Hide or show elements based on constraint
             if !should_show {
                 for element in constrained_elements.nodes() {
@@ -427,7 +440,7 @@ impl<'a> Renderer<'a> {
                 }
             }
         }
-        
+
         Ok(())
     }
 
@@ -440,13 +453,13 @@ impl<'a> Renderer<'a> {
     ) -> Result<()> {
         // Find all elements that might contain variables
         let all_elements = root.select("*");
-        
+
         for element in all_elements.nodes() {
             // Skip elements with itemprop - they're handled separately
             if element.attr("itemprop").is_some() {
                 continue;
             }
-            
+
             // Check if this element has no child elements (leaf node)
             // Only process text content for leaf nodes to avoid destroying structure
             let sel = Selection::from(element.clone());
@@ -467,42 +480,44 @@ impl<'a> Renderer<'a> {
                             }
                         })
                         .collect::<Vec<_>>();
-                    
+
                     if !variables.is_empty() {
-                        let processed_text = self.process_variables_in_text(&text, &variables, data)?;
+                        let processed_text =
+                            self.process_variables_in_text(&text, &variables, data)?;
                         element.set_text_content(&processed_text);
                     }
                 }
             }
-            
+
             // Check attributes for variables
             let attrs = element.attrs();
             for attr in &attrs {
                 let attr_value = &attr.value;
                 if attr_value.contains("${") {
-                        let variables = VARIABLE_REGEX
-                            .captures_iter(attr_value)
-                            .map(|cap| {
-                                let var_path = &cap[1];
-                                let path = split_path_cow(var_path).into_owned();
-                                Variable {
-                                    path,
-                                    raw: cap[0].to_string(),
-                                }
-                            })
-                            .collect::<Vec<_>>();
-                        
+                    let variables = VARIABLE_REGEX
+                        .captures_iter(attr_value)
+                        .map(|cap| {
+                            let var_path = &cap[1];
+                            let path = split_path_cow(var_path).into_owned();
+                            Variable {
+                                path,
+                                raw: cap[0].to_string(),
+                            }
+                        })
+                        .collect::<Vec<_>>();
+
                     if !variables.is_empty() {
-                        let processed_value = self.process_variables_in_text(attr_value, &variables, data)?;
+                        let processed_value =
+                            self.process_variables_in_text(attr_value, &variables, data)?;
                         element.set_attr(&attr.name.local, &processed_value);
                     }
                 }
             }
         }
-        
+
         Ok(())
     }
-    
+
     /// Render children of a scoped element
     fn render_scoped_children(
         &self,
@@ -511,14 +526,14 @@ impl<'a> Renderer<'a> {
     ) -> Result<()> {
         // Find all child elements with itemprop within this scope
         let scoped_selection = Selection::from(scope_element.clone());
-        
+
         // Process template elements that are children of this scope
         for element_def in &self.template.elements {
             // Skip if this is the scope element itself
             if element_def.is_scope {
                 continue;
             }
-            
+
             // Find elements matching this definition within the scope
             let child_elements = scoped_selection.select(&element_def.selector);
             if !child_elements.is_empty() {
@@ -528,10 +543,42 @@ impl<'a> Renderer<'a> {
                 }
             }
         }
-        
+
         Ok(())
     }
-    
+
+    /// Apply inline data-constraint attributes by parsing them directly from DOM
+    fn apply_inline_constraints(&self, root: &Selection, data: &dyn RenderValue) -> Result<()> {
+        // Find all elements with data-constraint attributes
+        let constrained_elements = root.select("[data-constraint]");
+
+        for element in constrained_elements.nodes() {
+            if let Some(constraint_expr) = element.attr("data-constraint") {
+                // Create constraint context
+                let context = ConstraintContext::new(data);
+
+                // Evaluate constraint expression directly
+                match context.evaluate_expression(&constraint_expr) {
+                    Ok(should_show) => {
+                        if !should_show {
+                            element.remove_from_parent();
+                        }
+                    }
+                    Err(e) => {
+                        // If constraint evaluation fails, hide the element to be safe
+                        eprintln!(
+                            "Constraint evaluation failed for '{}': {:?}",
+                            constraint_expr, e
+                        );
+                        element.remove_from_parent();
+                    }
+                }
+            }
+        }
+
+        Ok(())
+    }
+
     /// Serialize a selection back to HTML using optimized string building
     fn serialize_selection(&self, selection: &Selection) -> String {
         // For now, avoid the string buffer due to safety issues
@@ -541,9 +588,14 @@ impl<'a> Renderer<'a> {
         }
         result
     }
-    
+
     /// Perform CSS selector query with optional caching
-    fn cached_select<'s>(&self, root: &'s Selection, selector: &str, _use_cache: bool) -> Selection<'s> {
+    fn cached_select<'s>(
+        &self,
+        root: &'s Selection,
+        selector: &str,
+        _use_cache: bool,
+    ) -> Selection<'s> {
         // Note: Caching disabled for now due to lifetime complexity
         // TODO: Implement proper selector result caching
         root.select(selector)
@@ -553,18 +605,19 @@ impl<'a> Renderer<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::parser::Parser;
     use crate::compiler::Compiler;
+    use crate::parser::Parser;
     use crate::types::{Constraint, ConstraintType};
     use serde_json::json;
     use std::collections::HashMap;
-    
+    use std::sync::Arc;
+
     fn create_test_template(html: &str) -> Arc<CompiledTemplate> {
         let parser = Parser::new(html).unwrap();
         let template = parser.parse_template(None).unwrap();
         Compiler::compile_from_template(template)
     }
-    
+
     #[test]
     fn test_render_simple_template() {
         let html = r#"
@@ -575,21 +628,21 @@ mod tests {
                 </div>
             </template>
         "#;
-        
+
         let template = create_test_template(html);
         let handlers = std::collections::HashMap::new();
         let renderer = Renderer::new(&template, &handlers);
-        
+
         let data = json!({
             "title": "Hello World",
             "description": "This is a test"
         });
-        
+
         let result = renderer.render(&data).unwrap();
         assert!(result.contains("Hello World"));
         assert!(result.contains("This is a test"));
     }
-    
+
     #[test]
     fn test_render_with_variables() {
         let html = r#"
@@ -599,22 +652,22 @@ mod tests {
                 </div>
             </template>
         "#;
-        
+
         let template = create_test_template(html);
         let handlers = std::collections::HashMap::new();
         let renderer = Renderer::new(&template, &handlers);
-        
+
         let data = json!({
             "greeting": "Hello",
             "name": "World"
         });
-        
+
         let result = renderer.render(&data).unwrap();
         // For now this will just show "Hello" since we haven't implemented
         // full variable substitution yet
         assert!(result.contains("Hello"));
     }
-    
+
     #[test]
     fn test_render_with_attributes() {
         let html = r#"
@@ -622,22 +675,22 @@ mod tests {
                 <a href="${url}" itemprop="link">${linkText}</a>
             </template>
         "#;
-        
+
         let template = create_test_template(html);
         let handlers = std::collections::HashMap::new();
         let renderer = Renderer::new(&template, &handlers);
-        
+
         let data = json!({
             "url": "https://example.com",
             "link": "Example",
             "linkText": "Click here"
         });
-        
+
         let result = renderer.render(&data).unwrap();
         assert!(result.contains(r#"href="https://example.com""#));
         assert!(result.contains("Click here")); // from ${linkText} variable
     }
-    
+
     #[test]
     fn test_render_missing_data() {
         let html = r#"
@@ -648,21 +701,21 @@ mod tests {
                 </div>
             </template>
         "#;
-        
+
         let template = create_test_template(html);
         let handlers = std::collections::HashMap::new();
         let renderer = Renderer::new(&template, &handlers);
-        
+
         let data = json!({
             "title": "Only Title"
         });
-        
+
         let result = renderer.render(&data).unwrap();
         assert!(result.contains("Only Title"));
         // Missing property should render as empty
         assert!(result.contains("<p"));
     }
-    
+
     #[test]
     fn test_render_array() {
         let html = r#"
@@ -672,11 +725,11 @@ mod tests {
                 </ul>
             </template>
         "#;
-        
+
         let template = create_test_template(html);
         let handlers = std::collections::HashMap::new();
         let renderer = Renderer::new(&template, &handlers);
-        
+
         let data = json!({
             "items": [
                 {"name": "Item 1"},
@@ -684,14 +737,14 @@ mod tests {
                 {"name": "Item 3"}
             ]
         });
-        
+
         let result = renderer.render(&data).unwrap();
         // All items should be rendered
         assert!(result.contains("Item 1"));
         assert!(result.contains("Item 2"));
         assert!(result.contains("Item 3"));
     }
-    
+
     #[test]
     fn test_render_complex_array() {
         let html = r#"
@@ -705,11 +758,11 @@ mod tests {
                 </div>
             </template>
         "#;
-        
+
         let template = create_test_template(html);
         let handlers = std::collections::HashMap::new();
         let renderer = Renderer::new(&template, &handlers);
-        
+
         let data = json!({
             "users": [
                 {
@@ -724,23 +777,23 @@ mod tests {
                 }
             ]
         });
-        
+
         let result = renderer.render(&data).unwrap();
-        
+
         // Check that both users are rendered
         assert!(result.contains("Alice"));
         assert!(result.contains("alice@example.com"));
         assert!(result.contains("Age: 30"));
-        
+
         assert!(result.contains("Bob"));
         assert!(result.contains("bob@example.com"));
         assert!(result.contains("Age: 25"));
-        
+
         // Verify structure is maintained
         assert!(result.contains("class=\"user-card\""));
         assert!(result.contains("Email:"));
     }
-    
+
     #[test]
     fn test_render_empty_array() {
         let html = r#"
@@ -750,21 +803,21 @@ mod tests {
                 </ul>
             </template>
         "#;
-        
+
         let template = create_test_template(html);
         let handlers = std::collections::HashMap::new();
         let renderer = Renderer::new(&template, &handlers);
-        
+
         let data = json!({
             "items": []
         });
-        
+
         let result = renderer.render(&data).unwrap();
         // List should be empty (no <li> elements)
         assert!(!result.contains("<li"));
         assert!(result.contains("<ul>"));
     }
-    
+
     #[test]
     fn test_render_nested_object() {
         let html = r#"
@@ -779,11 +832,11 @@ mod tests {
                 </article>
             </template>
         "#;
-        
+
         let template = create_test_template(html);
         let handlers = std::collections::HashMap::new();
         let renderer = Renderer::new(&template, &handlers);
-        
+
         let data = json!({
             "title": "My Article",
             "author": {
@@ -792,14 +845,14 @@ mod tests {
             },
             "content": "This is the article content."
         });
-        
+
         let result = renderer.render(&data).unwrap();
         assert!(result.contains("My Article"));
         assert!(result.contains("John Doe"));
         assert!(result.contains("john@example.com"));
         assert!(result.contains("This is the article content."));
     }
-    
+
     #[test]
     fn test_render_with_constraints() {
         let html = r#"
@@ -818,33 +871,33 @@ mod tests {
                 </div>
             </template>
         "#;
-        
+
         let template = create_test_template(html);
         let handlers = std::collections::HashMap::new();
         let renderer = Renderer::new(&template, &handlers);
-        
+
         let data = json!({
             "title": "Conditional Content",
             "status": "active",
             "count": 10,
             "premium": false
         });
-        
+
         let result = renderer.render(&data).unwrap();
-        
+
         // Should show title
         assert!(result.contains("Conditional Content"));
-        
+
         // Should show active content
         assert!(result.contains("This content is only shown when status is active"));
-        
+
         // Should show count > 5 content
         assert!(result.contains("Count is greater than 5!"));
-        
+
         // Should NOT show premium content
         assert!(!result.contains("Premium content"));
     }
-    
+
     #[test]
     fn test_render_with_scope_constraints() {
         let html = r#"
@@ -860,10 +913,10 @@ mod tests {
                 </div>
             </template>
         "#;
-        
+
         let parser = Parser::new(html).unwrap();
         let mut template = parser.parse_template(Some("div")).unwrap();
-        
+
         // Manually set scope context for testing
         // In real usage, this would be set by the application
         template.constraints.push(Constraint {
@@ -871,24 +924,24 @@ mod tests {
             constraint_type: ConstraintType::Scope("admin".to_string()),
             scope: Some("admin".to_string()),
         });
-        
+
         let compiled = Compiler::compile_from_template(template);
         let handlers = std::collections::HashMap::new();
         let renderer = Renderer::new(&compiled, &handlers);
-        
+
         let data = json!({
             "title": "Scoped Content"
         });
-        
+
         let result = renderer.render(&data).unwrap();
-        
+
         // Should show title
         assert!(result.contains("Scoped Content"));
-        
+
         // For now, both will show since we don't have scope context in renderer
         // This would need application-level integration
     }
-    
+
     #[test]
     fn test_render_nested_array_of_objects() {
         let html = r#"
@@ -905,11 +958,11 @@ mod tests {
                 </div>
             </template>
         "#;
-        
+
         let template = create_test_template(html);
         let handlers = std::collections::HashMap::new();
         let renderer = Renderer::new(&template, &handlers);
-        
+
         let data = json!({
             "blogTitle": "Tech Blog",
             "posts": [
@@ -921,7 +974,7 @@ mod tests {
                     "summary": "Introduction to our blog"
                 },
                 {
-                    "title": "Second Post", 
+                    "title": "Second Post",
                     "author": {
                         "name": "Bob"
                     },
@@ -929,7 +982,7 @@ mod tests {
                 }
             ]
         });
-        
+
         let result = renderer.render(&data).unwrap();
         assert!(result.contains("Tech Blog"));
         assert!(result.contains("First Post"));
@@ -939,7 +992,7 @@ mod tests {
         assert!(result.contains("Bob"));
         assert!(result.contains("More interesting content"));
     }
-    
+
     #[test]
     fn test_render_invalid_data_types() {
         let html = r#"
@@ -950,23 +1003,23 @@ mod tests {
         let template = create_test_template(html);
         let handlers = HashMap::new();
         let renderer = Renderer::new(&template, &handlers);
-        
+
         // Test with null value
         let data = json!(null);
         let result = renderer.render(&data);
         assert!(result.is_ok());
-        
+
         // Test with boolean
         let data = json!(true);
         let result = renderer.render(&data);
         assert!(result.is_ok());
-        
+
         // Test with number
         let data = json!(42);
         let result = renderer.render(&data);
         assert!(result.is_ok());
     }
-    
+
     #[test]
     fn test_render_deeply_nested_data() {
         let html = r#"
@@ -977,7 +1030,7 @@ mod tests {
         let template = create_test_template(html);
         let handlers = HashMap::new();
         let renderer = Renderer::new(&template, &handlers);
-        
+
         let data = json!({
             "a": {
                 "b": {
@@ -993,11 +1046,11 @@ mod tests {
                 }
             }
         });
-        
+
         let result = renderer.render(&data).unwrap();
         assert!(result.contains("Deep value"));
     }
-    
+
     #[test]
     fn test_render_with_special_characters() {
         let html = r#"
@@ -1008,11 +1061,11 @@ mod tests {
         let template = create_test_template(html);
         let handlers = HashMap::new();
         let renderer = Renderer::new(&template, &handlers);
-        
+
         let data = json!({
             "content": "<script>alert('XSS')</script> & \"quotes\" 'apostrophes'"
         });
-        
+
         let result = renderer.render(&data).unwrap();
         // dom_query handles escaping automatically when setting text content
         // It escapes < and > but may not escape quotes in text content
@@ -1021,7 +1074,7 @@ mod tests {
         // Check for the actual quotes in the output (may not be escaped in text content)
         assert!(result.contains("quotes") || result.contains("&quot;"));
     }
-    
+
     #[test]
     fn test_render_with_unicode() {
         let html = r#"
@@ -1034,19 +1087,19 @@ mod tests {
         let template = create_test_template(html);
         let handlers = HashMap::new();
         let renderer = Renderer::new(&template, &handlers);
-        
+
         let data = json!({
             "emoji": "Hello 😀🎉🌟",
             "chinese": "你好世界",
             "rtl": "مرحبا بالعالم"
         });
-        
+
         let result = renderer.render(&data).unwrap();
         assert!(result.contains("Hello 😀🎉🌟"));
         assert!(result.contains("你好世界"));
         assert!(result.contains("مرحبا بالعالم"));
     }
-    
+
     #[test]
     fn test_render_large_dataset() {
         let html = r#"
@@ -1061,7 +1114,7 @@ mod tests {
         let template = create_test_template(html);
         let handlers = HashMap::new();
         let renderer = Renderer::new(&template, &handlers);
-        
+
         // Create large array
         let mut items = Vec::new();
         for i in 0..1000 {
@@ -1070,15 +1123,15 @@ mod tests {
                 "value": format!("Item {}", i)
             }));
         }
-        
+
         let data = json!({ "items": items });
         let result = renderer.render(&data).unwrap();
-        
+
         // Should render all items
         assert!(result.contains("Item 0"));
         assert!(result.contains("Item 999"));
     }
-    
+
     #[test]
     fn test_render_with_null_values() {
         let html = r#"
@@ -1092,17 +1145,21 @@ mod tests {
         let template = create_test_template(html);
         let handlers = HashMap::new();
         let renderer = Renderer::new(&template, &handlers);
-        
+
         let data = json!({
             "nullable": null,
             "defined": "value"
         });
-        
+
         let result = renderer.render(&data).unwrap();
         // The second span should contain "value"
         assert!(result.contains("value"));
         // The result should have two span elements
         let span_count = result.matches("<span").count();
-        assert_eq!(span_count, 2, "Expected 2 span elements, found {}", span_count);
+        assert_eq!(
+            span_count, 2,
+            "Expected 2 span elements, found {}",
+            span_count
+        );
     }
 }

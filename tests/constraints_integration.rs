@@ -2,7 +2,7 @@
 //!
 //! These tests verify data-constraint and data-scope attribute handling.
 
-use html_template::{HtmlTemplate};
+use html_template::HtmlTemplate;
 use serde_json::json;
 
 #[test]
@@ -20,28 +20,28 @@ fn test_simple_constraints() {
             </div>
         </template>
     "#;
-    
+
     let template = HtmlTemplate::from_str(html, None).unwrap();
-    
+
     // Test with showDetails = true
     let data = json!({
         "title": "Conditional Content",
         "showDetails": true,
         "hideSection": false
     });
-    
+
     let result = template.render(&data).unwrap();
     assert!(result.contains("Conditional Content"));
     assert!(result.contains("These are the detailed contents"));
     assert!(result.contains("This section is conditionally shown"));
-    
+
     // Test with showDetails = false
     let data2 = json!({
         "title": "Conditional Content",
         "showDetails": false,
         "hideSection": true
     });
-    
+
     let result2 = template.render(&data2).unwrap();
     assert!(result2.contains("Conditional Content"));
     assert!(!result2.contains("These are the detailed contents"));
@@ -68,22 +68,22 @@ fn test_comparison_constraints() {
             </div>
         </template>
     "#;
-    
+
     let template = HtmlTemplate::from_str(html, None).unwrap();
-    
+
     let data = json!({
         "age": 21,
         "score": 85,
         "count": 0,
         "level": 3
     });
-    
+
     let result = template.render(&data).unwrap();
     assert!(result.contains("Adult content"));
     assert!(result.contains("Excellent score"));
     assert!(result.contains("No items found"));
     assert!(result.contains("Beginner level"));
-    
+
     // Test with different values
     let data2 = json!({
         "age": 16,
@@ -91,7 +91,7 @@ fn test_comparison_constraints() {
         "count": 5,
         "level": 10
     });
-    
+
     let result2 = template.render(&data2).unwrap();
     assert!(!result2.contains("Adult content"));
     assert!(!result2.contains("Excellent score"));
@@ -116,27 +116,27 @@ fn test_string_equality_constraints() {
             </div>
         </template>
     "#;
-    
+
     let template = HtmlTemplate::from_str(html, None).unwrap();
-    
+
     let data = json!({
         "status": "active",
         "role": "admin",
         "type": "public"
     });
-    
+
     let result = template.render(&data).unwrap();
     assert!(result.contains("Status is active"));
     assert!(result.contains("Admin panel"));
     assert!(result.contains("Visible content"));
-    
+
     // Test with different values
     let data2 = json!({
         "status": "inactive",
         "role": "user",
         "type": "hidden"
     });
-    
+
     let result2 = template.render(&data2).unwrap();
     assert!(!result2.contains("Status is active"));
     assert!(!result2.contains("Admin panel"));
@@ -157,9 +157,9 @@ fn test_nested_property_constraints() {
             </div>
         </template>
     "#;
-    
+
     let template = HtmlTemplate::from_str(html, None).unwrap();
-    
+
     let data = json!({
         "user": {
             "isLoggedIn": true,
@@ -171,7 +171,7 @@ fn test_nested_property_constraints() {
             }
         }
     });
-    
+
     let result = template.render(&data).unwrap();
     assert!(result.contains("Welcome, John!"));
     assert!(result.contains("Email notifications are enabled"));
@@ -199,9 +199,9 @@ fn test_constraints_with_arrays() {
             </div>
         </template>
     "#;
-    
+
     let template = HtmlTemplate::from_str(html, None).unwrap();
-    
+
     let data = json!({
         "products": [
             {
@@ -221,20 +221,20 @@ fn test_constraints_with_arrays() {
             }
         ]
     });
-    
+
     let result = template.render(&data).unwrap();
-    
+
     // Laptop - expensive and in stock
     assert!(result.contains("Laptop"));
     assert!(result.contains("Price: $999"));
     assert!(result.contains("Add to Cart"));
     assert!(!result.contains("Budget Friendly!"));
-    
+
     // Mouse - cheap and in stock
     assert!(result.contains("Mouse"));
     assert!(result.contains("Price: $25"));
     assert!(result.contains("Budget Friendly!"));
-    
+
     // Keyboard - out of stock
     assert!(result.contains("Keyboard"));
     assert!(result.contains("Out of Stock"));
@@ -257,15 +257,15 @@ fn test_data_scope_attributes() {
             </div>
         </template>
     "#;
-    
+
     let template = HtmlTemplate::from_str(html, None).unwrap();
-    
+
     // This test might depend on how scope is implemented
     // For now, we'll test basic rendering
     let data = json!({
         "userRole": "admin"
     });
-    
+
     let result = template.render(&data).unwrap();
     assert!(result.contains("Dashboard"));
     // Scope handling might filter these based on implementation
@@ -285,16 +285,16 @@ fn test_complex_constraint_expressions() {
             </div>
         </template>
     "#;
-    
+
     let template = HtmlTemplate::from_str(html, None).unwrap();
-    
+
     let data = json!({
         "premium": true,
         "credits": 10,
         "trial": false,
         "subscription": true
     });
-    
+
     let result = template.render(&data).unwrap();
     assert!(result.contains("Premium features available"));
     assert!(result.contains("Access granted"));
@@ -314,11 +314,11 @@ fn test_constraints_with_missing_properties() {
             </div>
         </template>
     "#;
-    
+
     let template = HtmlTemplate::from_str(html, None).unwrap();
-    
+
     let data = json!({});
-    
+
     let result = template.render(&data).unwrap();
     assert!(!result.contains("Should not appear"));
     assert!(result.contains("Should appear"));
@@ -338,13 +338,13 @@ fn test_constraints_with_null_values() {
             </div>
         </template>
     "#;
-    
+
     let template = HtmlTemplate::from_str(html, None).unwrap();
-    
+
     let data = json!({
         "nullValue": null
     });
-    
+
     let result = template.render(&data).unwrap();
     assert!(!result.contains("Null is truthy"));
     assert!(result.contains("Null is falsy"));

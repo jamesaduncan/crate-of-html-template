@@ -18,7 +18,7 @@ fn test_input_element_handling() {
             </form>
         </template>
     "#;
-    
+
     let template = HtmlTemplateBuilder::new()
         .from_str(html)
         .with_selector("form")
@@ -31,9 +31,9 @@ fn test_input_element_handling() {
         "subscribe": "true",
         "age": 25
     });
-    
+
     let result = template.render(&data).unwrap();
-    
+
     // Input values should be set via value attribute
     assert!(result.contains(r#"value="john_doe""#));
     assert!(result.contains(r#"value="john@example.com""#));
@@ -59,7 +59,7 @@ fn test_select_element_handling() {
             </form>
         </template>
     "#;
-    
+
     let template = HtmlTemplateBuilder::new()
         .from_str(html)
         .with_selector("form")
@@ -70,14 +70,14 @@ fn test_select_element_handling() {
         "country": "uk",
         "language": "es"
     });
-    
+
     let result = template.render(&data).unwrap();
     println!("Select result: {}", result);
-    
+
     // Selected options should have the selected attribute
     assert!(result.contains(r#"<option value="uk" selected"#));
     assert!(result.contains(r#"<option value="es" selected"#));
-    
+
     // Other options should not be selected
     assert!(!result.contains(r#"<option value="us" selected"#));
     assert!(!result.contains(r#"<option value="en" selected"#));
@@ -93,7 +93,7 @@ fn test_textarea_element_handling() {
             </form>
         </template>
     "#;
-    
+
     let template = HtmlTemplateBuilder::new()
         .from_str(html)
         .with_selector("form")
@@ -104,13 +104,13 @@ fn test_textarea_element_handling() {
         "bio": "I am a software developer with 5 years of experience.\nI love coding!",
         "notes": "<script>alert('test')</script> Some notes with special chars & quotes"
     });
-    
+
     let result = template.render(&data).unwrap();
-    
+
     // Textarea content should be set as text content
     assert!(result.contains("I am a software developer"));
     assert!(result.contains("I love coding!"));
-    
+
     // Special characters should be escaped
     assert!(result.contains("&lt;script&gt;"));
     assert!(result.contains("&amp;"));
@@ -127,7 +127,7 @@ fn test_meta_element_handling() {
             </head>
         </template>
     "#;
-    
+
     let template = HtmlTemplateBuilder::new()
         .from_str(html)
         .with_selector("head")
@@ -139,9 +139,9 @@ fn test_meta_element_handling() {
         "ogTitle": "Rust Templates - Complete Guide",
         "keywords": "rust, templates, web development"
     });
-    
+
     let result = template.render(&data).unwrap();
-    
+
     // Meta content should be set via content attribute
     assert!(result.contains(r#"content="A comprehensive guide to Rust templates""#));
     assert!(result.contains(r#"content="Rust Templates - Complete Guide""#));
@@ -186,7 +186,7 @@ fn test_mixed_form_elements() {
             </form>
         </template>
     "#;
-    
+
     let template = HtmlTemplateBuilder::new()
         .from_str(html)
         .with_selector("form")
@@ -200,9 +200,9 @@ fn test_mixed_form_elements() {
         "bio": "Experienced administrator with strong leadership skills.",
         "active": "checked"
     });
-    
+
     let result = template.render(&data).unwrap();
-    
+
     // Check all form elements
     assert!(result.contains(r#"value="Jane Smith""#));
     assert!(result.contains(r#"value="jane@company.com""#));
@@ -225,7 +225,7 @@ fn test_input_types() {
             </form>
         </template>
     "#;
-    
+
     let template = HtmlTemplateBuilder::new()
         .from_str(html)
         .with_default_handlers()
@@ -239,9 +239,9 @@ fn test_input_types() {
         "color": "#ff6600",
         "id": "12345"
     });
-    
+
     let result = template.render(&data).unwrap();
-    
+
     // All input types should have their values set
     assert!(result.contains(r#"value="2024-01-15""#));
     assert!(result.contains(r#"value="14:30""#));
@@ -264,7 +264,7 @@ fn test_radio_buttons() {
             </form>
         </template>
     "#;
-    
+
     let template = HtmlTemplateBuilder::new()
         .from_str(html)
         .with_default_handlers()
@@ -273,9 +273,9 @@ fn test_radio_buttons() {
     let data = json!({
         "size": "medium"
     });
-    
+
     let result = template.render(&data).unwrap();
-    
+
     // All radio buttons should have the value set
     // In a real implementation, you might want to set 'checked' attribute
     // for the matching value instead
@@ -292,18 +292,18 @@ fn test_custom_handlers_integration() {
             </div>
         </template>
     "#;
-    
+
     let template = HtmlTemplateBuilder::new()
         .from_str(html)
         .with_selector("div")
         .with_default_handlers() // Use default handlers
         .build()
         .unwrap();
-    
+
     let data = json!({
         "content": "Test content"
     });
-    
+
     let result = template.render(&data).unwrap();
     assert!(result.contains("Test content"));
 }
@@ -321,7 +321,7 @@ fn test_nested_form_arrays() {
             </form>
         </template>
     "#;
-    
+
     let template = HtmlTemplateBuilder::new()
         .from_str(html)
         .with_default_handlers()
@@ -345,15 +345,15 @@ fn test_nested_form_arrays() {
             }
         ]
     });
-    
+
     let result = template.render(&data).unwrap();
-    
+
     // Check dynamic form fields
     assert!(result.contains("Username"));
     assert!(result.contains(r#"type="text""#));
     assert!(result.contains(r#"name="username""#));
     assert!(result.contains("Enter your username"));
-    
+
     assert!(result.contains("Password"));
     assert!(result.contains(r#"type="password""#));
     assert!(result.contains(r#"name="password""#));

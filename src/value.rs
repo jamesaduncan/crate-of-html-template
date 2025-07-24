@@ -60,9 +60,9 @@
 //! }
 //! ```
 
-use std::borrow::Cow;
 use serde::Serialize;
 use serde_json::Value as JsonValue;
+use std::borrow::Cow;
 
 /// Trait for types that can be rendered in HTML templates
 ///
@@ -140,24 +140,24 @@ pub trait RenderValue {
     ///
     /// ```rust,ignore
     /// use serde_json::json;
-    /// 
+    ///
     /// let data = json!({"user": {"name": "Alice", "age": 30}});
-    /// 
+    ///
     /// // Simple property
     /// assert_eq!(data.get_property(&["user".to_string()]), None); // user is object
-    /// 
+    ///
     /// // Nested property  
     /// let name = data.get_property(&["user".to_string(), "name".to_string()]);
     /// assert_eq!(name, Some(Cow::Borrowed("Alice")));
     /// ```
     fn get_property(&self, path: &[String]) -> Option<Cow<str>>;
-    
+
     /// Check if this value represents an array
     ///
     /// Returns `true` if this value should be treated as an array for template rendering.
     /// Array values will have their template elements cloned for each item.
     fn is_array(&self) -> bool;
-    
+
     /// Convert to array of RenderValue items
     ///  
     /// If [`is_array`] returns `true`, this method should return the array items.
@@ -165,7 +165,7 @@ pub trait RenderValue {
     ///
     /// [`is_array`]: RenderValue::is_array
     fn as_array(&self) -> Option<Vec<&dyn RenderValue>>;
-    
+
     /// Get Schema.org type information
     ///
     /// Returns the Schema.org type URL for this data, used with `itemtype` attributes.
@@ -180,13 +180,13 @@ pub trait RenderValue {
     /// }
     /// ```
     fn get_type(&self) -> Option<&str>;
-    
+
     /// Get unique identifier for this data
     ///
     /// Returns a unique identifier used with `itemid` attributes for linking
     /// and cross-referencing data items.
     fn get_id(&self) -> Option<&str>;
-    
+
     /// Get a nested value as a RenderValue (for arrays and objects)
     ///
     /// This method provides access to nested values that implement RenderValue.
@@ -201,7 +201,7 @@ pub trait RenderValue {
     ///
     /// - `Some(&dyn RenderValue)` - Reference to the nested value
     /// - `None` - Path doesn't exist or doesn't yield a RenderValue
-    fn get_value(&self, path: &[String]) -> Option<&dyn RenderValue> {
+    fn get_value(&self, _path: &[String]) -> Option<&dyn RenderValue> {
         // Default implementation returns None
         // Implementations can override to provide nested value access
         None
@@ -219,16 +219,16 @@ impl RenderValue for JsonValue {
                 _ => None,
             };
         }
-        
+
         let mut current = self;
         for segment in path.iter() {
             // Handle array access like items[0]
             if let Some(array_match) = parse_array_access(segment) {
                 let (prop_name, index) = array_match;
-                
+
                 // First get the property
                 current = current.get(&prop_name)?;
-                
+
                 // Then access the array index
                 if let JsonValue::Array(arr) = current {
                     current = arr.get(index)?;
@@ -239,7 +239,7 @@ impl RenderValue for JsonValue {
                 current = current.get(segment)?;
             }
         }
-        
+
         match current {
             JsonValue::String(s) => Some(Cow::Borrowed(s.as_str())),
             JsonValue::Number(n) => Some(Cow::Owned(n.to_string())),
@@ -248,50 +248,42 @@ impl RenderValue for JsonValue {
             _ => None,
         }
     }
-    
+
     fn is_array(&self) -> bool {
         matches!(self, JsonValue::Array(_))
     }
-    
+
     fn as_array(&self) -> Option<Vec<&dyn RenderValue>> {
         match self {
-            JsonValue::Array(arr) => {
-                Some(arr.iter().map(|v| v as &dyn RenderValue).collect())
-            }
+            JsonValue::Array(arr) => Some(arr.iter().map(|v| v as &dyn RenderValue).collect()),
             _ => None,
         }
     }
-    
+
     fn get_type(&self) -> Option<&str> {
         match self {
-            JsonValue::Object(obj) => {
-                obj.get("@type")
-                    .and_then(|v| v.as_str())
-            }
+            JsonValue::Object(obj) => obj.get("@type").and_then(|v| v.as_str()),
             _ => None,
         }
     }
-    
+
     fn get_id(&self) -> Option<&str> {
         match self {
-            JsonValue::Object(obj) => {
-                obj.get("@id")
-                    .and_then(|v| v.as_str())
-            }
+            JsonValue::Object(obj) => obj.get("@id").and_then(|v| v.as_str()),
             _ => None,
         }
     }
-    
+
     fn get_value(&self, path: &[String]) -> Option<&dyn RenderValue> {
         if path.is_empty() {
             return Some(self);
         }
-        
+
         let mut current = self;
         for segment in path {
             match current {
                 JsonValue::Object(obj) => {
-                    current = obj.get(segment)?;
+                    current = obj.get(segment.as_str())?;
                 }
                 JsonValue::Array(arr) => {
                     // Try to parse segment as index
@@ -301,7 +293,7 @@ impl RenderValue for JsonValue {
                 _ => return None,
             }
         }
-        
+
         Some(current)
     }
 }
@@ -314,19 +306,19 @@ impl RenderValue for String {
             None
         }
     }
-    
+
     fn is_array(&self) -> bool {
         false
     }
-    
+
     fn as_array(&self) -> Option<Vec<&dyn RenderValue>> {
         None
     }
-    
+
     fn get_type(&self) -> Option<&str> {
         None
     }
-    
+
     fn get_id(&self) -> Option<&str> {
         None
     }
@@ -340,19 +332,19 @@ impl RenderValue for &str {
             None
         }
     }
-    
+
     fn is_array(&self) -> bool {
         false
     }
-    
+
     fn as_array(&self) -> Option<Vec<&dyn RenderValue>> {
         None
     }
-    
+
     fn get_type(&self) -> Option<&str> {
         None
     }
-    
+
     fn get_id(&self) -> Option<&str> {
         None
     }
@@ -369,19 +361,19 @@ macro_rules! impl_render_value_for_number {
                         None
                     }
                 }
-                
+
                 fn is_array(&self) -> bool {
                     false
                 }
-                
+
                 fn as_array(&self) -> Option<Vec<&dyn RenderValue>> {
                     None
                 }
-                
+
                 fn get_type(&self) -> Option<&str> {
                     None
                 }
-                
+
                 fn get_id(&self) -> Option<&str> {
                     None
                 }
@@ -397,29 +389,29 @@ impl<T: RenderValue> RenderValue for Vec<T> {
         if path.is_empty() {
             return None;
         }
-        
+
         // Handle array index access
         if path.len() == 1 {
             if let Ok(index) = path[0].parse::<usize>() {
                 return self.get(index)?.get_property(&[]);
             }
         }
-        
+
         None
     }
-    
+
     fn is_array(&self) -> bool {
         true
     }
-    
+
     fn as_array(&self) -> Option<Vec<&dyn RenderValue>> {
         Some(self.iter().map(|v| v as &dyn RenderValue).collect())
     }
-    
+
     fn get_type(&self) -> Option<&str> {
         None
     }
-    
+
     fn get_id(&self) -> Option<&str> {
         None
     }
@@ -438,11 +430,10 @@ impl<'a, T: Serialize> SerializeWrapper<'a, T> {
             cached_json: once_cell::sync::OnceCell::new(),
         }
     }
-    
+
     fn as_json(&self) -> &JsonValue {
-        self.cached_json.get_or_init(|| {
-            serde_json::to_value(self.value).unwrap_or(JsonValue::Null)
-        })
+        self.cached_json
+            .get_or_init(|| serde_json::to_value(self.value).unwrap_or(JsonValue::Null))
     }
 }
 
@@ -450,20 +441,20 @@ impl<'a, T: Serialize> RenderValue for SerializeWrapper<'a, T> {
     fn get_property(&self, path: &[String]) -> Option<Cow<str>> {
         self.as_json().get_property(path)
     }
-    
+
     fn is_array(&self) -> bool {
         self.as_json().is_array()
     }
-    
+
     fn as_array(&self) -> Option<Vec<&dyn RenderValue>> {
         // This is a bit inefficient but necessary for the trait
         None
     }
-    
+
     fn get_type(&self) -> Option<&str> {
         self.as_json().get_type()
     }
-    
+
     fn get_id(&self) -> Option<&str> {
         self.as_json().get_id()
     }
@@ -486,24 +477,21 @@ fn parse_array_access(segment: &str) -> Option<(String, usize)> {
 mod tests {
     use super::*;
     use serde_json::json;
-    
+
     #[test]
     fn test_json_value_simple_property() {
         let data = json!({
             "name": "John Doe",
             "age": 30
         });
-        
+
         assert_eq!(
             data.get_property(&["name".to_string()]).unwrap(),
             "John Doe"
         );
-        assert_eq!(
-            data.get_property(&["age".to_string()]).unwrap(),
-            "30"
-        );
+        assert_eq!(data.get_property(&["age".to_string()]).unwrap(), "30");
     }
-    
+
     #[test]
     fn test_json_value_nested_property() {
         let data = json!({
@@ -513,42 +501,37 @@ mod tests {
                 }
             }
         });
-        
-        let path = vec!["user".to_string(), "profile".to_string(), "name".to_string()];
-        assert_eq!(
-            data.get_property(&path).unwrap(),
-            "Jane Doe"
-        );
+
+        let path = vec![
+            "user".to_string(),
+            "profile".to_string(),
+            "name".to_string(),
+        ];
+        assert_eq!(data.get_property(&path).unwrap(), "Jane Doe");
     }
-    
+
     #[test]
     fn test_json_value_array() {
         let data = json!(["a", "b", "c"]);
-        
+
         assert!(data.is_array());
         let array = data.as_array().unwrap();
         assert_eq!(array.len(), 3);
     }
-    
+
     #[test]
     fn test_json_value_array_access() {
         let data = json!({
             "items": ["first", "second", "third"]
         });
-        
+
         let path = vec!["items[0]".to_string()];
-        assert_eq!(
-            data.get_property(&path).unwrap(),
-            "first"
-        );
-        
+        assert_eq!(data.get_property(&path).unwrap(), "first");
+
         let path = vec!["items[1]".to_string()];
-        assert_eq!(
-            data.get_property(&path).unwrap(),
-            "second"
-        );
+        assert_eq!(data.get_property(&path).unwrap(), "second");
     }
-    
+
     #[test]
     fn test_json_value_type_and_id() {
         let data = json!({
@@ -556,11 +539,11 @@ mod tests {
             "@id": "john-doe",
             "name": "John Doe"
         });
-        
+
         assert_eq!(data.get_type().unwrap(), "Person");
         assert_eq!(data.get_id().unwrap(), "john-doe");
     }
-    
+
     #[test]
     fn test_string_render_value() {
         let s = String::from("Hello");
@@ -568,28 +551,28 @@ mod tests {
         assert!(s.get_property(&["any".to_string()]).is_none());
         assert!(!s.is_array());
     }
-    
+
     #[test]
     fn test_number_render_value() {
         let n: i32 = 42;
         assert_eq!(n.get_property(&[]).unwrap(), "42");
-        
+
         let f: f64 = 3.14;
         assert_eq!(f.get_property(&[]).unwrap(), "3.14");
     }
-    
+
     #[test]
     fn test_vec_render_value() {
         let v = vec!["a", "b", "c"];
         assert!(v.is_array());
-        
+
         let array = v.as_array().unwrap();
         assert_eq!(array.len(), 3);
-        
+
         assert_eq!(v.get_property(&["0".to_string()]).unwrap(), "a");
         assert_eq!(v.get_property(&["1".to_string()]).unwrap(), "b");
     }
-    
+
     #[test]
     fn test_parse_array_access() {
         assert_eq!(

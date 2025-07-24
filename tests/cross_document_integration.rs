@@ -19,7 +19,7 @@ fn test_render_from_html_basic() {
             </body>
         </html>
     "#;
-    
+
     let template_html = r#"
         <template>
             <div class="article">
@@ -29,11 +29,11 @@ fn test_render_from_html_basic() {
             </div>
         </template>
     "#;
-    
+
     let template = HtmlTemplate::from_str(template_html, Some("div.article")).unwrap();
     let results = template.render_from_html(source_html).unwrap();
     let result = &results[0]; // Use first result
-    
+
     assert!(result.contains("Test Article"));
     assert!(result.contains("This is a test article"));
     assert!(result.contains("By:"));
@@ -53,7 +53,7 @@ fn test_render_from_element_with_nested_data() {
             <span itemprop="email">jane@example.com</span>
         </div>
     "#;
-    
+
     let template_html = r#"
         <template>
             <div class="person">
@@ -69,11 +69,11 @@ fn test_render_from_element_with_nested_data() {
             </div>
         </template>
     "#;
-    
+
     let template = HtmlTemplate::from_str(template_html, Some("div.person")).unwrap();
     let results = template.render_from_html(source_html).unwrap();
     let result = &results[0]; // Use first result
-    
+
     assert!(result.contains("Jane Smith"));
     assert!(result.contains("jane@example.com"));
     assert!(result.contains("123 Main St"));
@@ -96,7 +96,7 @@ fn test_cross_document_with_arrays() {
             </article>
         </div>
     "#;
-    
+
     let template_html = r#"
         <template>
             <div class="blog">
@@ -110,17 +110,17 @@ fn test_cross_document_with_arrays() {
             </div>
         </template>
     "#;
-    
+
     let template = HtmlTemplate::from_str(template_html, Some("div.blog")).unwrap();
     let results = template.render_from_html(source_html).unwrap();
     let result = &results[0]; // Use first result
-    
+
     assert!(result.contains("Tech Blog"));
     assert!(result.contains("First Post"));
     assert!(result.contains("Second Post"));
     assert!(result.contains("By: Alice"));
     assert!(result.contains("By: Bob"));
-    
+
     // Should have multiple post articles
     assert_eq!(result.matches(r#"class="post""#).count(), 2);
 }
@@ -136,7 +136,7 @@ fn test_cross_document_with_special_elements() {
             <img itemprop="image" src="image.jpg" alt="Test image">
         </article>
     "#;
-    
+
     let template_html = r#"
         <template>
             <article class="article">
@@ -148,17 +148,17 @@ fn test_cross_document_with_special_elements() {
             </article>
         </template>
     "#;
-    
+
     let template = HtmlTemplateBuilder::new()
         .from_str(template_html)
         .with_selector("article.article")
         .with_default_handlers()
         .build()
         .unwrap();
-        
+
     let results = template.render_from_html(source_html).unwrap();
     let result = &results[0]; // Use first result
-    
+
     assert!(result.contains("Special Elements Test"));
     assert!(result.contains("2024-01-15"));
     assert!(result.contains("2024-01-20T10:30:00"));
@@ -174,7 +174,7 @@ fn test_cross_document_missing_properties() {
             <!-- Missing description and author -->
         </div>
     "#;
-    
+
     let template_html = r#"
         <template>
             <div class="item">
@@ -184,11 +184,11 @@ fn test_cross_document_missing_properties() {
             </div>
         </template>
     "#;
-    
+
     let template = HtmlTemplate::from_str(template_html, Some("div.item")).unwrap();
     let results = template.render_from_html(source_html).unwrap();
     let result = &results[0]; // Use first result
-    
+
     assert!(result.contains("Partial Data"));
     // Missing properties should render as empty
     assert!(result.contains(r#"<p itemprop="description"></p>"#));
@@ -204,7 +204,7 @@ fn test_cross_document_with_constraints() {
             <span itemprop="priority">high</span>
         </div>
     "#;
-    
+
     let template_html = r#"
         <template>
             <div class="item">
@@ -218,11 +218,11 @@ fn test_cross_document_with_constraints() {
             </div>
         </template>
     "#;
-    
+
     let template = HtmlTemplate::from_str(template_html, Some("div.item")).unwrap();
     let results = template.render_from_html(source_html).unwrap();
     let result = &results[0]; // Use first result
-    
+
     assert!(result.contains("Test Item"));
     assert!(result.contains("This item is active"));
     assert!(result.contains("HIGH PRIORITY"));
@@ -235,21 +235,21 @@ fn test_cross_document_error_handling() {
             <div itemprop="name"></div>
         </template>
     "#;
-    
+
     let template = HtmlTemplate::from_str(template_html, None).unwrap();
-    
+
     // Test with invalid HTML
     let invalid_html = "<div><span>unclosed";
     let result = template.render_from_html(invalid_html);
     // Should handle gracefully - dom_query is quite forgiving
     assert!(result.is_ok());
-    
+
     // Test with non-existent selector
     let valid_html = "<div>content</div>";
     let result = template.render_from_html(valid_html);
     // Should return empty result when no matching elements found
     assert!(result.is_ok());
-    
+
     // Test with empty HTML
     let result = template.render_from_html("");
     assert!(result.is_ok());
@@ -269,7 +269,7 @@ fn test_multiple_source_elements() {
             </article>
         </div>
     "#;
-    
+
     let template_html = r#"
         <template>
             <div class="article">
@@ -278,17 +278,17 @@ fn test_multiple_source_elements() {
             </div>
         </template>
     "#;
-    
+
     let template = HtmlTemplate::from_str(template_html, Some("div.article")).unwrap();
-    
+
     // This should render using the first matching element
     let results = template.render_from_html(source_html).unwrap();
     let result = &results[0]; // Use first result
-    
+
     // Should contain data from first article
     assert!(result.contains("Article One"));
     assert!(result.contains("Author A"));
-    
+
     // Should not contain data from second article (only first match is used)
     assert!(!result.contains("Article Two"));
 }
@@ -307,7 +307,7 @@ fn test_cross_document_with_complex_nesting() {
             </div>
         </div>
     "#;
-    
+
     let template_html = r#"
         <template>
             <div class="org">
@@ -322,11 +322,11 @@ fn test_cross_document_with_complex_nesting() {
             </div>
         </template>
     "#;
-    
+
     let template = HtmlTemplate::from_str(template_html, Some("div.org")).unwrap();
     let results = template.render_from_html(source_html).unwrap();
     let result = &results[0]; // Use first result
-    
+
     assert!(result.contains("Tech Corp"));
     // Note: Cross-document nested itemscope extraction has limitations
     // The nested employee name should be "John Smith" but currently shows "Tech Corp"

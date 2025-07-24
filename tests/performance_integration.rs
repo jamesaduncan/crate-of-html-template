@@ -20,9 +20,9 @@ fn test_large_array_rendering_performance() {
             </div>
         </template>
     "#;
-    
+
     let template = HtmlTemplate::from_str(html, Some("div.container")).unwrap();
-    
+
     // Generate a large dataset
     let mut items = Vec::new();
     for i in 0..1000 {
@@ -32,23 +32,27 @@ fn test_large_array_rendering_performance() {
             "price": format!("${}.99", i % 100 + 10)
         }));
     }
-    
+
     let data = json!({
         "items": items
     });
-    
+
     let start = Instant::now();
     let result = template.render(&data).unwrap();
     let duration = start.elapsed();
-    
+
     // Should complete within reasonable time (adjust threshold as needed)
-    assert!(duration.as_millis() < 5000, "Large array rendering took too long: {:?}", duration);
-    
+    assert!(
+        duration.as_millis() < 5000,
+        "Large array rendering took too long: {:?}",
+        duration
+    );
+
     // Verify correctness
     assert!(result.contains("Item 0"));
     assert!(result.contains("Item 999"));
     assert_eq!(result.matches(r#"class="item""#).count(), 1000);
-    
+
     println!("Rendered 1000 items in {:?}", duration);
 }
 
@@ -71,9 +75,9 @@ fn test_deeply_nested_structure_performance() {
             </div>
         </template>
     "#;
-    
+
     let template = HtmlTemplate::from_str(html, Some("div.org")).unwrap();
-    
+
     // Create deeply nested structure
     let mut departments = Vec::new();
     for d in 0..5 {
@@ -96,24 +100,28 @@ fn test_deeply_nested_structure_performance() {
             "teams": teams
         }));
     }
-    
+
     let data = json!({
         "name": "Test Organization",
         "departments": departments
     });
-    
+
     let start = Instant::now();
     let result = template.render(&data).unwrap();
     let duration = start.elapsed();
-    
+
     // Should handle nested structure efficiently
-    assert!(duration.as_millis() < 2000, "Nested structure rendering took too long: {:?}", duration);
-    
+    assert!(
+        duration.as_millis() < 2000,
+        "Nested structure rendering took too long: {:?}",
+        duration
+    );
+
     // Verify structure (5 depts * 4 teams * 10 members = 200 members total)
     assert_eq!(result.matches(r#"class="dept""#).count(), 5);
     assert_eq!(result.matches(r#"class="team""#).count(), 20);
     assert_eq!(result.matches(r#"class="member""#).count(), 200);
-    
+
     println!("Rendered nested structure (5x4x10) in {:?}", duration);
 }
 
@@ -141,15 +149,19 @@ fn test_template_compilation_performance() {
             </div>
         </template>
     "#;
-    
+
     // Test compilation time
     let start = Instant::now();
     let template = HtmlTemplate::from_str(html, Some("div.complex")).unwrap();
     let compilation_time = start.elapsed();
-    
+
     // Compilation should be fast
-    assert!(compilation_time.as_millis() < 100, "Template compilation took too long: {:?}", compilation_time);
-    
+    assert!(
+        compilation_time.as_millis() < 100,
+        "Template compilation took too long: {:?}",
+        compilation_time
+    );
+
     // Test that compiled template works correctly
     let data = json!({
         "title": "Performance Test",
@@ -161,7 +173,7 @@ fn test_template_compilation_performance() {
                 "items": [{"name": "Item A", "value": "Value A"}]
             },
             {
-                "heading": "Section 2", 
+                "heading": "Section 2",
                 "content": "Content 2",
                 "type": "special",
                 "items": [{"name": "Item B", "value": "Value B"}]
@@ -169,11 +181,11 @@ fn test_template_compilation_performance() {
         ],
         "sectionCount": 2
     });
-    
+
     let result = template.render(&data).unwrap();
     assert!(result.contains("Performance Test"));
     assert!(result.contains("Special Section"));
-    
+
     println!("Template compilation took {:?}", compilation_time);
 }
 
@@ -188,9 +200,9 @@ fn test_repeated_rendering_performance() {
             </div>
         </template>
     "#;
-    
+
     let template = HtmlTemplate::from_str(html, Some("div.item")).unwrap();
-    
+
     // Test rendering the same template multiple times
     let start = Instant::now();
     for i in 0..100 {
@@ -199,15 +211,19 @@ fn test_repeated_rendering_performance() {
             "description": format!("Description {}", i),
             "timestamp": format!("2024-01-{:02}", i % 30 + 1)
         });
-        
+
         let result = template.render(&data).unwrap();
         assert!(result.contains(&format!("Item {}", i)));
     }
     let total_time = start.elapsed();
-    
+
     // Should handle repeated rendering efficiently
-    assert!(total_time.as_millis() < 1000, "100 repeated renders took too long: {:?}", total_time);
-    
+    assert!(
+        total_time.as_millis() < 1000,
+        "100 repeated renders took too long: {:?}",
+        total_time
+    );
+
     let avg_time = total_time.as_micros() / 100;
     println!("Average render time: {}μs", avg_time);
 }
@@ -262,9 +278,9 @@ fn test_memory_usage_with_large_templates() {
             </div>
         </template>
     "#;
-    
+
     let template = HtmlTemplate::from_str(html, Some("div.document")).unwrap();
-    
+
     // Create substantial test data
     let mut articles = Vec::new();
     for i in 0..50 {
@@ -276,7 +292,7 @@ fn test_memory_usage_with_large_templates() {
                 "date": "2024-01-15"
             }));
         }
-        
+
         articles.push(json!({
             "headline": format!("Article {}", i),
             "publishDate": "2024-01-15",
@@ -286,7 +302,7 @@ fn test_memory_usage_with_large_templates() {
             "comments": comments
         }));
     }
-    
+
     let mut widgets = Vec::new();
     for i in 0..10 {
         let mut items = Vec::new();
@@ -301,11 +317,11 @@ fn test_memory_usage_with_large_templates() {
             "items": items
         }));
     }
-    
+
     let data = json!({
         "title": "Large Document Test",
         "link1": "/page1", "nav1": "Page 1",
-        "link2": "/page2", "nav2": "Page 2", 
+        "link2": "/page2", "nav2": "Page 2",
         "link3": "/page3", "nav3": "Page 3",
         "articles": articles,
         "widgets": widgets,
@@ -315,28 +331,35 @@ fn test_memory_usage_with_large_templates() {
             {"url": "/contact", "text": "Contact"}
         ]
     });
-    
+
     let start = Instant::now();
     let result = template.render(&data).unwrap();
     let duration = start.elapsed();
-    
+
     // Should handle large complex templates efficiently
-    assert!(duration.as_millis() < 3000, "Large template rendering took too long: {:?}", duration);
-    
+    assert!(
+        duration.as_millis() < 3000,
+        "Large template rendering took too long: {:?}",
+        duration
+    );
+
     // Verify structure
     assert_eq!(result.matches(r#"class="article""#).count(), 50);
     assert_eq!(result.matches(r#"class="comment""#).count(), 250); // 50 articles * 5 comments
     assert_eq!(result.matches(r#"class="widget""#).count(), 10);
-    
+
     // Verify content size is reasonable (not excessive memory usage)
     let result_size = result.len();
     assert!(result_size > 50000, "Result seems too small"); // Should have substantial content
     assert!(result_size < 5000000, "Result seems too large"); // But not excessive
-    
-    println!("Large template rendered in {:?}, output size: {} bytes", duration, result_size);
+
+    println!(
+        "Large template rendered in {:?}, output size: {} bytes",
+        duration, result_size
+    );
 }
 
-#[test] 
+#[test]
 fn test_constraint_evaluation_performance() {
     let html = r#"
         <template>
@@ -359,9 +382,9 @@ fn test_constraint_evaluation_performance() {
             </div>
         </template>
     "#;
-    
+
     let template = HtmlTemplate::from_str(html, Some("div.items")).unwrap();
-    
+
     // Create data with many items having various constraint conditions
     let mut items = Vec::new();
     for i in 0..500 {
@@ -373,22 +396,26 @@ fn test_constraint_evaluation_performance() {
             "score": i % 100
         }));
     }
-    
+
     let data = json!({
         "items": items
     });
-    
+
     let start = Instant::now();
     let result = template.render(&data).unwrap();
     let duration = start.elapsed();
-    
+
     // Constraint evaluation should be reasonably fast
-    assert!(duration.as_millis() < 2000, "Constraint evaluation took too long: {:?}", duration);
-    
+    assert!(
+        duration.as_millis() < 2000,
+        "Constraint evaluation took too long: {:?}",
+        duration
+    );
+
     // Verify some constraints were evaluated correctly
     assert!(result.contains("Active"));
     assert!(result.contains("High Priority"));
     assert!(result.contains("Important"));
-    
+
     println!("Constraint evaluation for 500 items took {:?}", duration);
 }

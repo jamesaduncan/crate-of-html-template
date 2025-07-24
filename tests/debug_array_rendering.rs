@@ -15,11 +15,12 @@ fn debug_array_extraction_and_rendering() {
             </ul>
         </div>
     "#;
-    
+
     // Extract microdata to see what we get
-    let microdata_items = html_template::microdata::extract_microdata_from_html(source_html).unwrap();
+    let microdata_items =
+        html_template::microdata::extract_microdata_from_html(source_html).unwrap();
     println!("Extracted microdata: {:#?}", microdata_items);
-    
+
     // Template with array handling
     let template_html = r#"
         <template>
@@ -31,9 +32,9 @@ fn debug_array_extraction_and_rendering() {
             </div>
         </template>
     "#;
-    
+
     let template = HtmlTemplate::from_str(template_html, Some("div.recipe")).unwrap();
     let results = template.render_from_html(source_html).unwrap();
-    
+
     println!("Rendered output: {:#?}", results);
 }

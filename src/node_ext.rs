@@ -13,7 +13,7 @@ impl<'a> NodeExt for Node<'a> {
     fn text_content(&self) -> String {
         self.text().to_string()
     }
-    
+
     fn attrs(&self) -> Option<HashMap<String, String>> {
         // Use the query method to access element data
         self.query(|node| {
@@ -23,23 +23,21 @@ impl<'a> NodeExt for Node<'a> {
                 } else {
                     let mut map = HashMap::new();
                     for attr in &element.attrs {
-                        map.insert(
-                            attr.name.local.to_string(),
-                            attr.value.to_string(),
-                        );
+                        map.insert(attr.name.local.to_string(), attr.value.to_string());
                     }
                     Some(map)
                 }
             } else {
                 None
             }
-        }).flatten()
+        })
+        .flatten()
     }
-    
+
     fn first_element_child(&self) -> Option<Node<'a>> {
         self.first_element_child()
     }
-    
+
     fn set_text_content(&self, text: &str) {
         // Remove all children and set text
         self.remove_children();

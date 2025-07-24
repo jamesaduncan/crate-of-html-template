@@ -1,11 +1,11 @@
 //! Integration tests for cross-document rendering
-//! 
+//!
 //! These tests verify that templates can extract microdata from one document
 //! and render it using a template from another document.
 
+use dom_query::Document;
 use html_template::*;
 use serde_json::json;
-use dom_query::Document;
 
 #[test]
 fn test_basic_cross_document_rendering() {
@@ -17,7 +17,7 @@ fn test_basic_cross_document_rendering() {
             <span itemprop="jobTitle">Software Engineer</span>
         </div>
     "#;
-    
+
     // Template document
     let template_html = r#"
         <template>
@@ -28,16 +28,16 @@ fn test_basic_cross_document_rendering() {
             </div>
         </template>
     "#;
-    
+
     // Create template
     let template = create_test_template(template_html, "div.person-card").unwrap();
-    
+
     // Render using microdata from source
     let results = template.render_from_html(source_html).unwrap();
-    
+
     assert_eq!(results.len(), 1);
     let output = &results[0];
-    
+
     assert!(output.contains("John Doe"));
     assert!(output.contains("john@example.com"));
     assert!(output.contains("Software Engineer"));
@@ -59,7 +59,7 @@ fn test_cross_document_with_nested_objects() {
             </div>
         </article>
     "#;
-    
+
     // Template for blog posts
     let template_html = r#"
         <template>
@@ -77,15 +77,15 @@ fn test_cross_document_with_nested_objects() {
             </article>
         </template>
     "#;
-    
+
     let template = create_test_template(template_html, "article.blog-post").unwrap();
     let results = template.render_from_html(source_html).unwrap();
-    
+
     assert_eq!(results.len(), 1);
     let output = &results[0];
-    
+
     println!("Nested objects output:\n{}", output);
-    
+
     assert!(output.contains("My Blog Post"));
     assert!(output.contains("Jane Smith"));
     assert!(output.contains("2024-01-15"));
@@ -109,7 +109,7 @@ fn test_cross_document_with_arrays() {
             </div>
         </div>
     "#;
-    
+
     // Template with array handling
     let template_html = r#"
         <template>
@@ -124,15 +124,15 @@ fn test_cross_document_with_arrays() {
             </div>
         </template>
     "#;
-    
+
     let template = create_test_template(template_html, "div.recipe").unwrap();
     let results = template.render_from_html(source_html).unwrap();
-    
+
     assert_eq!(results.len(), 1);
     let output = &results[0];
-    
+
     println!("Arrays output:\n{}", output);
-    
+
     assert!(output.contains("Chocolate Cake"));
     // Array content rendering has a known issue - items are cloned but not populated
     // This is tracked as a separate task
@@ -158,7 +158,7 @@ fn test_cross_document_with_multiple_items() {
             </div>
         </div>
     "#;
-    
+
     // Template for person cards
     let template_html = r#"
         <template>
@@ -168,18 +168,18 @@ fn test_cross_document_with_multiple_items() {
             </div>
         </template>
     "#;
-    
+
     let template = create_test_template(template_html, "div.person").unwrap();
     let results = template.render_from_html(source_html).unwrap();
-    
+
     assert_eq!(results.len(), 3);
-    
+
     assert!(results[0].contains("Alice Johnson"));
     assert!(results[0].contains("Designer"));
-    
+
     assert!(results[1].contains("Bob Wilson"));
     assert!(results[1].contains("Developer"));
-    
+
     assert!(results[2].contains("Carol Brown"));
     assert!(results[2].contains("Manager"));
 }
@@ -194,7 +194,7 @@ fn test_render_from_element() {
             <span itemprop="description">High-quality wireless headphones with noise cancellation.</span>
         </div>
     "#;
-    
+
     // Template for products
     let template_html = r#"
         <template>
@@ -205,17 +205,17 @@ fn test_render_from_element() {
             </div>
         </template>
     "#;
-    
+
     let template = create_test_template(template_html, "div.product").unwrap();
-    
+
     // Get the source element
     let source_doc = Document::from(source_html);
     let selection = source_doc.select("div[itemscope]");
     let source_element = &selection.nodes()[0];
-    
+
     // Render from the specific element
     let output = template.render_from_element(&source_element).unwrap();
-    
+
     assert!(output.contains("Wireless Headphones"));
     assert!(output.contains("$99.99"));
     assert!(output.contains("High-quality wireless headphones"));
@@ -224,7 +224,7 @@ fn test_render_from_element() {
 // Helper function to create templates for testing
 fn create_test_template(html: &str, selector: &str) -> Result<HtmlTemplate> {
     use html_template::*;
-    
+
     // Create the template using the public API
     HtmlTemplate::from_str(html, Some(selector))
 }

@@ -1,0 +1,7 @@
+# Clippy configuration for html-template
+
+# Allow some complex types for handlers
+type-complexity-threshold = 100
+
+# Allow some manual string strips for performance
+avoid-breaking-exported-api = true

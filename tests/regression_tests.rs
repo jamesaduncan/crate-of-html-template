@@ -19,15 +19,15 @@ fn test_regression_empty_array_handling() {
             </div>
         </template>
     "#;
-    
+
     let template = HtmlTemplate::from_str(html, Some("div.container")).unwrap();
     let data = json!({
         "items": [],
         "count": 0
     });
-    
+
     let result = template.render(&data).unwrap();
-    
+
     // Should not contain any <li> elements for empty array
     assert!(!result.contains("<li"));
     // Should still contain the container structure
@@ -49,16 +49,16 @@ fn test_regression_null_property_handling() {
             </div>
         </template>
     "#;
-    
+
     let template = HtmlTemplate::from_str(html, None).unwrap();
     let data = json!({
         "title": "Test Title",
         "description": null,
         "optional": null
     });
-    
+
     let result = template.render(&data).unwrap();
-    
+
     assert!(result.contains("Test Title"));
     // Null properties should render as empty elements
     assert!(result.contains(r#"<p itemprop="description"></p>"#));
@@ -76,15 +76,15 @@ fn test_regression_special_characters_escaping() {
             </div>
         </template>
     "#;
-    
+
     let template = HtmlTemplate::from_str(html, None).unwrap();
     let data = json!({
         "content": "<script>alert('xss')</script> & \"quotes\" 'apostrophes'",
         "code": "if (x < y && y > z) { return true; }"
     });
-    
+
     let result = template.render(&data).unwrap();
-    
+
     // HTML should be escaped
     assert!(result.contains("&lt;script&gt;"));
     assert!(result.contains("&amp;"));
@@ -108,7 +108,7 @@ fn test_regression_nested_itemscope_data_isolation() {
             </article>
         </template>
     "#;
-    
+
     let template = HtmlTemplate::from_str(html, Some("article")).unwrap();
     let data = json!({
         "title": "Article Title",
@@ -121,9 +121,9 @@ fn test_regression_nested_itemscope_data_isolation() {
         "name": "Wrong Name",
         "email": "wrong@email.com"
     });
-    
+
     let result = template.render(&data).unwrap();
-    
+
     assert!(result.contains("Article Title"));
     assert!(result.contains("Article content"));
     // Should use nested author data, not root-level name/email
@@ -147,12 +147,12 @@ fn test_regression_malformed_variable_syntax() {
             </div>
         </template>
     "#;
-    
+
     let template = HtmlTemplate::from_str(html, None).unwrap();
     let data = json!({
         "valid": "Valid content",
         "content1": "replaced1",
-        "content2": "replaced2", 
+        "content2": "replaced2",
         "content3": "replaced3",
         "content4": "replaced4",
         "content5": "replaced5",
@@ -162,13 +162,13 @@ fn test_regression_malformed_variable_syntax() {
             }
         }
     });
-    
+
     let result = template.render(&data).unwrap();
-    
+
     // Valid variables should work
     assert!(result.contains("Valid content"));
     assert!(result.contains("Deep value"));
-    
+
     // Properties should still be replaced even with malformed variables in content
     assert!(result.contains("replaced1"));
     assert!(result.contains("replaced2"));
@@ -190,7 +190,7 @@ fn test_regression_array_property_name_collision() {
             </div>
         </template>
     "#;
-    
+
     let template = HtmlTemplate::from_str(html, None).unwrap();
     let data = json!({
         "items": [
@@ -198,9 +198,9 @@ fn test_regression_array_property_name_collision() {
             {"name": "Array Item 2"}
         ]
     });
-    
+
     let result = template.render(&data).unwrap();
-    
+
     // The non-array itemprop="items" should get some representation of the array
     // while itemprop="items[]" should iterate through array items
     assert_eq!(result.matches("<li").count(), 2);
@@ -208,7 +208,7 @@ fn test_regression_array_property_name_collision() {
     assert!(result.contains("Array Item 2"));
 }
 
-#[test] 
+#[test]
 fn test_regression_constraint_with_missing_properties() {
     // Regression test: Constraints referencing missing properties should not crash
     let html = r#"
@@ -227,14 +227,14 @@ fn test_regression_constraint_with_missing_properties() {
             </div>
         </template>
     "#;
-    
+
     let template = HtmlTemplate::from_str(html, None).unwrap();
     let data = json!({
         "title": "Test Title"
     });
-    
+
     let result = template.render(&data).unwrap();
-    
+
     assert!(result.contains("Test Title"));
     assert!(!result.contains("Should not appear"));
     assert!(result.contains("Should appear"));
@@ -253,16 +253,16 @@ fn test_regression_unicode_content_handling() {
             </div>
         </template>
     "#;
-    
+
     let template = HtmlTemplate::from_str(html, None).unwrap();
     let data = json!({
         "title": "测试标题 العنوان Заголовок",
         "content": "Content with émojis: 🚀 🎉 ✨ and símböls: ñáéíóú",
         "emoji": "🔥"
     });
-    
+
     let result = template.render(&data).unwrap();
-    
+
     assert!(result.contains("测试标题"));
     assert!(result.contains("العنوان"));
     assert!(result.contains("Заголовок"));
@@ -271,7 +271,7 @@ fn test_regression_unicode_content_handling() {
     assert!(result.contains("🔥"));
 }
 
-#[test] 
+#[test]
 fn test_regression_whitespace_preservation() {
     // Regression test: Significant whitespace should be preserved
     let html = r#"
@@ -282,15 +282,15 @@ fn test_regression_whitespace_preservation() {
             </div>
         </template>
     "#;
-    
+
     let template = HtmlTemplate::from_str(html, None).unwrap();
     let data = json!({
         "code": "function test() {\n    return true;\n}",
         "spaced": "  keep  spaces  "
     });
-    
+
     let result = template.render(&data).unwrap();
-    
+
     // Newlines and indentation should be preserved in code
     assert!(result.contains("{\n    return"));
     // Leading/trailing spaces should be preserved
@@ -307,7 +307,7 @@ fn test_regression_deep_nesting_stack_overflow() {
             </div>
         </template>
     "#;
-    
+
     let template = HtmlTemplate::from_str(html, None).unwrap();
     let data = json!({
         "deep": "replaced",
@@ -331,7 +331,7 @@ fn test_regression_deep_nesting_stack_overflow() {
             }
         }
     });
-    
+
     let result = template.render(&data).unwrap();
     assert!(result.contains("deep value"));
 }
@@ -357,7 +357,7 @@ fn test_regression_boolean_constraint_evaluation() {
             </div>
         </template>
     "#;
-    
+
     let template = HtmlTemplate::from_str(html, None).unwrap();
     let data = json!({
         "isActive": true,
@@ -365,9 +365,9 @@ fn test_regression_boolean_constraint_evaluation() {
         "enabled": true,
         "disabled": false
     });
-    
+
     let result = template.render(&data).unwrap();
-    
+
     assert!(result.contains("Active"));
     assert!(result.contains("Visible"));
     assert!(result.contains("Enabled"));
@@ -390,7 +390,7 @@ fn test_regression_array_index_access() {
             </div>
         </template>
     "#;
-    
+
     let template = HtmlTemplate::from_str(html, None).unwrap();
     let data = json!({
         "items": [
@@ -400,9 +400,9 @@ fn test_regression_array_index_access() {
         ],
         "first": "First item outside array"
     });
-    
+
     let result = template.render(&data).unwrap();
-    
+
     assert!(result.contains("Item A"));
     assert!(result.contains("Position: 0"));
     assert!(result.contains("Item C"));
@@ -426,28 +426,28 @@ fn test_regression_handler_element_modification() {
             </form>
         </template>
     "#;
-    
+
     let template = HtmlTemplateBuilder::new()
         .from_str(html)
         .with_selector("form")
         .with_default_handlers()
         .build()
         .unwrap();
-        
+
     let data = json!({
         "country": "uk",
         "name": "John Doe",
         "bio": "Software developer"
     });
-    
+
     let result = template.render(&data).unwrap();
-    
+
     // Handlers should enhance, not break, the template
     assert!(result.contains("United States"));
     assert!(result.contains("United Kingdom"));
     assert!(result.contains(r#"value="John Doe""#));
     assert!(result.contains("Software developer"));
-    
+
     // Structure should be maintained
     assert!(result.contains("<form>"));
     assert!(result.contains("</form>"));

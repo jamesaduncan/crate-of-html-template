@@ -3,7 +3,7 @@
 //! These tests verify the core functionality of the template library
 //! including property binding, variable interpolation, and basic rendering.
 
-use html_template::{HtmlTemplate, HtmlTemplateBuilder, render_string_with_selector};
+use html_template::{render_string_with_selector, HtmlTemplate, HtmlTemplateBuilder};
 use serde_json::json;
 
 #[test]
@@ -16,13 +16,13 @@ fn test_simple_property_binding() {
             </div>
         </template>
     "#;
-    
+
     let template = HtmlTemplate::from_str(html, Some("div")).unwrap();
     let data = json!({
         "title": "Hello World",
         "description": "This is a test"
     });
-    
+
     let result = template.render(&data).unwrap();
     assert!(result.contains("<h1 itemprop=\"title\">Hello World</h1>"));
     assert!(result.contains("<p itemprop=\"description\">This is a test</p>"));
@@ -38,7 +38,7 @@ fn test_variable_interpolation() {
             </div>
         </template>
     "#;
-    
+
     let template = HtmlTemplate::from_str(html, Some("div")).unwrap();
     let data = json!({
         "greeting": "Hi there",
@@ -47,7 +47,7 @@ fn test_variable_interpolation() {
         "age": 30,
         "info": "Custom info"
     });
-    
+
     let result = template.render(&data).unwrap();
     // When an element has itemprop with content containing variables,
     // the variables are replaced within that content
@@ -66,7 +66,7 @@ fn test_attribute_templating() {
             </div>
         </template>
     "#;
-    
+
     let template = HtmlTemplate::from_str(html, Some("div")).unwrap();
     let data = json!({
         "url": "https://example.com",
@@ -76,7 +76,7 @@ fn test_attribute_templating() {
         "altText": "Test image",
         "image": "image-prop"
     });
-    
+
     let result = template.render(&data).unwrap();
     assert!(result.contains(r#"href="https://example.com""#));
     assert!(result.contains("Click here"));
@@ -95,12 +95,12 @@ fn test_missing_properties() {
             </div>
         </template>
     "#;
-    
+
     let template = HtmlTemplate::from_str(html, Some("div")).unwrap();
     let data = json!({
         "title": "Only Title"
     });
-    
+
     let result = template.render(&data).unwrap();
     assert!(result.contains("Only Title"));
     // Missing properties should render as empty
@@ -120,7 +120,7 @@ fn test_nested_properties() {
             </div>
         </template>
     "#;
-    
+
     let template = HtmlTemplate::from_str(html, None).unwrap();
     let data = json!({
         "user": {
@@ -139,7 +139,7 @@ fn test_nested_properties() {
         "bio": "Default bio",
         "location": "Default location"
     });
-    
+
     let result = template.render(&data).unwrap();
     assert!(result.contains("John Doe"));
     assert!(result.contains("Software developer"));
@@ -156,19 +156,19 @@ fn test_builder_pattern() {
             </article>
         </template>
     "#;
-    
+
     let template = HtmlTemplateBuilder::new()
         .from_str(html)
         .with_selector("article")
         .no_caching()
         .build()
         .unwrap();
-    
+
     let data = json!({
         "headline": "Breaking News",
         "content": "Something important happened."
     });
-    
+
     let result = template.render(&data).unwrap();
     assert!(result.contains("Breaking News"));
     assert!(result.contains("Something important happened"));
@@ -183,11 +183,11 @@ fn test_convenience_functions() {
             </div>
         </template>
     "#;
-    
+
     let data = json!({
         "message": "Quick render test"
     });
-    
+
     let result = render_string_with_selector(html, "div", &data).unwrap();
     assert!(result.contains("Quick render test"));
 }
@@ -214,7 +214,7 @@ fn test_complex_template() {
             </article>
         </template>
     "#;
-    
+
     let template = HtmlTemplate::from_str(html, Some("article")).unwrap();
     let data = json!({
         "title": "Understanding Rust Templates",
@@ -231,9 +231,9 @@ fn test_complex_template() {
         "tagline": "Some tags",
         "readingInfo": "Some reading time"
     });
-    
+
     let result = template.render(&data).unwrap();
-    
+
     // Check all the rendered content
     assert!(result.contains("Understanding Rust Templates"));
     assert!(result.contains("By Jane Developer"));
@@ -256,7 +256,7 @@ fn test_boolean_and_numeric_values() {
             </div>
         </template>
     "#;
-    
+
     let template = HtmlTemplate::from_str(html, None).unwrap();
     let data = json!({
         "isActive": true,
@@ -268,7 +268,7 @@ fn test_boolean_and_numeric_values() {
         "priceInfo": "placeholder",
         "ratioInfo": "placeholder"
     });
-    
+
     let result = template.render(&data).unwrap();
     assert!(result.contains("Active: true"));
     assert!(result.contains("Count: 42"));
@@ -286,14 +286,14 @@ fn test_null_values() {
             </div>
         </template>
     "#;
-    
+
     let template = HtmlTemplate::from_str(html, None).unwrap();
     let data = json!({
         "nullable": null,
         "nullVar": null,
         "nullInfo": "placeholder"
     });
-    
+
     let result = template.render(&data).unwrap();
     // Null values should render as empty
     assert!(result.contains("<p itemprop=\"nullable\"></p>"));
@@ -301,7 +301,7 @@ fn test_null_values() {
     assert!(result.contains("Value: "));
 }
 
-#[test] 
+#[test]
 fn test_special_characters_in_content() {
     let html = r#"
         <template>
@@ -311,14 +311,14 @@ fn test_special_characters_in_content() {
             </div>
         </template>
     "#;
-    
+
     let template = HtmlTemplate::from_str(html, None).unwrap();
     let data = json!({
         "content": "<script>alert('XSS')</script> & \"quotes\" 'apostrophes'",
         "code": "fn main() { println!(\"Hello, world!\"); }",
         "codeSnippet": "placeholder"
     });
-    
+
     let result = template.render(&data).unwrap();
     // Should escape HTML entities
     assert!(result.contains("&lt;script&gt;"));

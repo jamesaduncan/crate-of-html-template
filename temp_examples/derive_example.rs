@@ -1,5 +1,5 @@
 //! Example demonstrating the Renderable derive macro
-//! 
+//!
 //! This example shows how to use the #[derive(Renderable)] macro to automatically
 //! implement the RenderValue trait for custom structs.
 
@@ -13,13 +13,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     struct BlogPost {
         id: String,
         title: String,
-        
+
         #[renderable(rename = "authorName")]
         author: String,
-        
+
         content: String,
         tags: Vec<String>,
-        
+
         #[renderable(skip)]
         internal_notes: String,
     }
@@ -67,13 +67,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Demonstrate property access
     println!("\nProperty access examples:");
     println!("Title: {:?}", post.get_property(&["title".to_string()]));
-    println!("Author (renamed): {:?}", post.get_property(&["authorName".to_string()]));
+    println!(
+        "Author (renamed): {:?}",
+        post.get_property(&["authorName".to_string()])
+    );
     println!("ID: {:?}", post.get_id());
     println!("Tag count: {:?}", post.get_property(&["tags".to_string()]));
     println!("Is array: {}", post.is_array());
 
     // The internal_notes field should not be accessible
-    println!("Internal notes (should be None): {:?}", post.get_property(&["internal_notes".to_string()]));
+    println!(
+        "Internal notes (should be None): {:?}",
+        post.get_property(&["internal_notes".to_string()])
+    );
 
     Ok(())
 }

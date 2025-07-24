@@ -1,18 +1,15 @@
 use proc_macro::TokenStream;
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
-use syn::{
-    parse_macro_input, DeriveInput, Data, Fields, FieldsNamed,
-    Attribute, Meta, Type, 
-};
+use syn::{parse_macro_input, Attribute, Data, DeriveInput, Fields, FieldsNamed, Meta, Type};
 
 /// Derive macro for automatically implementing the RenderValue trait
-/// 
+///
 /// # Examples
-/// 
+///
 /// ```ignore
 /// use html_template::{RenderValue, Renderable};
-/// 
+///
 /// #[derive(Renderable)]
 /// struct Person {
 ///     name: String,
@@ -26,7 +23,7 @@ use syn::{
 #[proc_macro_derive(Renderable, attributes(renderable))]
 pub fn derive_renderable(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
-    
+
     match generate_renderable_impl(&input) {
         Ok(tokens) => tokens.into(),
         Err(err) => err.to_compile_error().into(),
@@ -36,45 +33,60 @@ pub fn derive_renderable(input: TokenStream) -> TokenStream {
 fn generate_renderable_impl(input: &DeriveInput) -> syn::Result<TokenStream2> {
     let name = &input.ident;
     let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
-    
+
     let data = match &input.data {
         Data::Struct(data) => data,
-        _ => return Err(syn::Error::new_spanned(input, "Renderable can only be derived for structs")),
+        _ => {
+            return Err(syn::Error::new_spanned(
+                input,
+                "Renderable can only be derived for structs",
+            ))
+        }
     };
-    
+
     let fields = match &data.fields {
         Fields::Named(fields) => fields,
-        Fields::Unnamed(_) => return Err(syn::Error::new_spanned(input, "Renderable requires named fields")),
-        Fields::Unit => return Err(syn::Error::new_spanned(input, "Renderable cannot be derived for unit structs")),
+        Fields::Unnamed(_) => {
+            return Err(syn::Error::new_spanned(
+                input,
+                "Renderable requires named fields",
+            ))
+        }
+        Fields::Unit => {
+            return Err(syn::Error::new_spanned(
+                input,
+                "Renderable cannot be derived for unit structs",
+            ))
+        }
     };
-    
+
     let field_handlers = generate_field_handlers(fields)?;
     let array_check = generate_array_check(fields);
     let array_impl = generate_array_impl(fields);
     let type_impl = generate_type_impl(input);
     let id_impl = generate_id_impl(fields);
     let get_value_impl = generate_get_value_impl(fields);
-    
+
     Ok(quote! {
         impl #impl_generics html_template::RenderValue for #name #ty_generics #where_clause {
             fn get_property(&self, path: &[String]) -> Option<std::borrow::Cow<str>> {
                 if path.is_empty() {
                     return None;
                 }
-                
+
                 #field_handlers
-                
+
                 None
             }
-            
+
             #array_check
-            
+
             #array_impl
-            
+
             #type_impl
-            
+
             #id_impl
-            
+
             #get_value_impl
         }
     })
@@ -82,23 +94,23 @@ fn generate_renderable_impl(input: &DeriveInput) -> syn::Result<TokenStream2> {
 
 fn generate_field_handlers(fields: &FieldsNamed) -> syn::Result<TokenStream2> {
     let mut field_matches = Vec::new();
-    
+
     for field in &fields.named {
         let field_name = field.ident.as_ref().unwrap();
         let field_name_str = field_name.to_string();
-        
+
         let attrs = parse_field_attributes(&field.attrs)?;
-        
+
         // Skip fields marked with #[renderable(skip)]
         if attrs.skip {
             continue;
         }
-        
+
         // Use custom name if provided, otherwise use field name
         let property_name = attrs.rename.unwrap_or(field_name_str);
-        
+
         let field_type = &field.ty;
-        
+
         // Handle different types of fields
         let value_expr = if is_option_type(field_type) {
             quote! {
@@ -140,14 +152,14 @@ fn generate_field_handlers(fields: &FieldsNamed) -> syn::Result<TokenStream2> {
                 }
             }
         };
-        
+
         field_matches.push(quote! {
             if path[0] == #property_name {
                 return #value_expr;
             }
         });
     }
-    
+
     Ok(quote! {
         #(#field_matches)*
     })
@@ -159,7 +171,7 @@ fn generate_array_check(fields: &FieldsNamed) -> TokenStream2 {
         let attrs = parse_field_attributes(&field.attrs).unwrap_or_default();
         !attrs.skip && is_vec_type(&field.ty)
     });
-    
+
     quote! {
         fn is_array(&self) -> bool {
             #has_array_field
@@ -169,17 +181,17 @@ fn generate_array_check(fields: &FieldsNamed) -> TokenStream2 {
 
 fn generate_array_impl(fields: &FieldsNamed) -> TokenStream2 {
     let mut array_handling = Vec::new();
-    
+
     for field in &fields.named {
         let field_name = field.ident.as_ref().unwrap();
         let attrs = parse_field_attributes(&field.attrs).unwrap_or_default();
-        
+
         if attrs.skip || !is_vec_type(&field.ty) {
             continue;
         }
-        
+
         let property_name = attrs.rename.unwrap_or_else(|| field_name.to_string());
-        
+
         array_handling.push(quote! {
             if !items.is_empty() {
                 // Check if this is an array property
@@ -194,7 +206,7 @@ fn generate_array_impl(fields: &FieldsNamed) -> TokenStream2 {
             }
         });
     }
-    
+
     quote! {
         fn as_array(&self) -> Option<Vec<&dyn html_template::RenderValue>> {
             let items: Vec<&dyn html_template::RenderValue> = vec![self];
@@ -206,7 +218,7 @@ fn generate_array_impl(fields: &FieldsNamed) -> TokenStream2 {
 
 fn generate_type_impl(input: &DeriveInput) -> TokenStream2 {
     let type_name = input.ident.to_string();
-    
+
     quote! {
         fn get_type(&self) -> Option<&str> {
             Some(#type_name)
@@ -219,11 +231,11 @@ fn generate_id_impl(fields: &FieldsNamed) -> TokenStream2 {
     for field in &fields.named {
         let field_name = field.ident.as_ref().unwrap();
         let attrs = parse_field_attributes(&field.attrs).unwrap_or_default();
-        
+
         if attrs.skip {
             continue;
         }
-        
+
         if attrs.id || field_name == "id" {
             // For string fields, we can return a reference directly
             if is_string_type(&field.ty) {
@@ -242,7 +254,7 @@ fn generate_id_impl(fields: &FieldsNamed) -> TokenStream2 {
             }
         }
     }
-    
+
     quote! {
         fn get_id(&self) -> Option<&str> {
             None
@@ -271,17 +283,17 @@ struct FieldAttributes {
 
 fn parse_field_attributes(attrs: &[Attribute]) -> syn::Result<FieldAttributes> {
     let mut result = FieldAttributes::default();
-    
+
     for attr in attrs {
         if !attr.path().is_ident("renderable") {
             continue;
         }
-        
+
         match &attr.meta {
             Meta::List(meta_list) => {
                 // Parse the meta list manually
                 let content = meta_list.tokens.to_string();
-                
+
                 // Simple parsing for common cases
                 if content.trim() == "skip" {
                     result.skip = true;
@@ -322,11 +334,14 @@ fn parse_field_attributes(attrs: &[Attribute]) -> syn::Result<FieldAttributes> {
                 result.skip = true;
             }
             _ => {
-                return Err(syn::Error::new_spanned(attr, "Invalid renderable attribute"));
+                return Err(syn::Error::new_spanned(
+                    attr,
+                    "Invalid renderable attribute",
+                ));
             }
         }
     }
-    
+
     Ok(result)
 }
 

@@ -7,7 +7,7 @@
 mod tests {
     use crate::*;
     use serde_json::json;
-    
+
     #[test]
     fn test_empty_template() {
         let html = r#"<template></template>"#;
@@ -16,7 +16,7 @@ mod tests {
         let result = template.render(&data).unwrap();
         assert!(result.trim().is_empty() || result.contains("<html"));
     }
-    
+
     #[test]
     fn test_template_with_only_text() {
         let html = r#"<template>Just some text without any elements</template>"#;
@@ -25,7 +25,7 @@ mod tests {
         let result = template.render(&data).unwrap();
         assert!(result.contains("Just some text"));
     }
-    
+
     #[test]
     fn test_deeply_nested_variables() {
         let html = r#"
@@ -34,19 +34,19 @@ mod tests {
             </template>
         "#;
         let template = HtmlTemplate::from_str(html, None).unwrap();
-        
+
         // Create deeply nested data
         let data = json!({
-            "a": {"b": {"c": {"d": {"e": {"f": {"g": {"h": {"i": {"j": {"k": {"l": {"m": 
-                {"n": {"o": {"p": {"q": {"r": {"s": {"t": {"u": {"v": {"w": {"x": {"y": 
+            "a": {"b": {"c": {"d": {"e": {"f": {"g": {"h": {"i": {"j": {"k": {"l": {"m":
+                {"n": {"o": {"p": {"q": {"r": {"s": {"t": {"u": {"v": {"w": {"x": {"y":
                     {"z": "Deep value"}
                 }}}}}}}}}}}}}}}}}}}}}}}}
         });
-        
+
         let result = template.render(&data).unwrap();
         assert!(result.contains("Deep value"));
     }
-    
+
     #[test]
     fn test_variable_with_non_existent_deep_path() {
         let html = r#"
@@ -60,7 +60,7 @@ mod tests {
         // Should render empty or the original variable
         assert!(!result.contains("undefined"));
     }
-    
+
     #[test]
     fn test_multiple_same_variables_in_one_element() {
         let html = r#"
@@ -73,7 +73,7 @@ mod tests {
         let result = template.render(&data).unwrap();
         assert_eq!(result.matches("Alice").count(), 3);
     }
-    
+
     #[test]
     fn test_array_with_single_element() {
         let html = r#"
@@ -89,7 +89,7 @@ mod tests {
         assert!(result.contains("Only one"));
         assert_eq!(result.matches("<li").count(), 1);
     }
-    
+
     #[test]
     fn test_array_with_non_object_elements() {
         let html = r#"
@@ -105,7 +105,7 @@ mod tests {
         // Should render 3 li elements even though items are strings not objects
         assert_eq!(result.matches("<li").count(), 3);
     }
-    
+
     #[test]
     fn test_mixed_array_elements() {
         let html = r#"
@@ -130,7 +130,7 @@ mod tests {
         // Should handle all types gracefully
         assert_eq!(result.matches("<span").count(), 6);
     }
-    
+
     #[test]
     fn test_self_closing_tags() {
         let html = r#"
@@ -153,7 +153,7 @@ mod tests {
         assert!(result.contains("test.jpg"));
         assert!(result.contains("test value") || result.contains("field value"));
     }
-    
+
     #[test]
     fn test_special_html_entities_in_property_names() {
         let html = r#"
@@ -167,7 +167,7 @@ mod tests {
         // Should handle encoded property names
         assert!(result.contains("<div"));
     }
-    
+
     #[test]
     #[ignore] // This test causes a panic in serde_json
     fn test_circular_reference_in_data() {
@@ -191,7 +191,7 @@ mod tests {
         // Both should render the same value
         assert_eq!(result.matches("Same Person").count(), 2);
     }
-    
+
     #[test]
     fn test_very_long_property_names() {
         let long_prop = "a".repeat(1000);
@@ -206,7 +206,7 @@ mod tests {
         let result = template.render(&data).unwrap();
         assert!(result.contains("value"));
     }
-    
+
     #[test]
     fn test_whitespace_only_property_values() {
         let html = r#"
@@ -228,7 +228,7 @@ mod tests {
         // Should preserve whitespace
         assert!(result.contains("<span>   </span>"));
     }
-    
+
     #[test]
     fn test_numeric_property_names() {
         let html = r#"
@@ -246,7 +246,7 @@ mod tests {
         assert!(result.contains("numeric key 1"));
         assert!(result.contains("numeric key 2"));
     }
-    
+
     #[test]
     fn test_boolean_values_in_attributes() {
         let html = r#"
@@ -266,7 +266,7 @@ mod tests {
         assert!(result.contains("checked=\"true\""));
         assert!(result.contains("disabled=\"false\""));
     }
-    
+
     #[test]
     fn test_array_property_without_brackets() {
         // Test what happens when we forget the [] suffix
@@ -288,7 +288,7 @@ mod tests {
         // Should not duplicate the li elements
         assert_eq!(result.matches("<li").count(), 1);
     }
-    
+
     #[test]
     fn test_nested_arrays() {
         let html = r#"
@@ -329,7 +329,7 @@ mod tests {
         assert_eq!(result.matches("<article").count(), 2);
         assert_eq!(result.matches("<li").count(), 3);
     }
-    
+
     #[test]
     fn test_empty_array_in_nested_structure() {
         let html = r#"
@@ -353,7 +353,7 @@ mod tests {
         assert!(result.contains("Empty List"));
         assert!(!result.contains("<li")); // No li elements should be rendered
     }
-    
+
     #[test]
     fn test_constraint_with_missing_property() {
         let html = r#"
@@ -370,7 +370,7 @@ mod tests {
         assert!(!result.contains("Should not show"));
         assert!(result.contains("Should show"));
     }
-    
+
     #[test]
     fn test_multiple_constraints_on_same_element() {
         let html = r#"
@@ -386,9 +386,14 @@ mod tests {
             "count": 10
         });
         let result = template.render(&data).unwrap();
+        println!("Result HTML: {}", result);
+        println!(
+            "Contains 'Complex constraint': {}",
+            result.contains("Complex constraint")
+        );
         assert!(result.contains("Complex constraint"));
     }
-    
+
     #[test]
     fn test_escaped_variables_in_text() {
         let html = r#"
@@ -402,7 +407,7 @@ mod tests {
         // Should not process escaped variables
         assert!(result.contains("${variable}") || result.contains("example"));
     }
-    
+
     #[test]
     fn test_zero_width_characters() {
         let html = r#"
@@ -418,7 +423,7 @@ mod tests {
         // Should preserve zero-width characters
         assert!(result.contains("\u{200B}"));
     }
-    
+
     #[test]
     fn test_rtl_and_bidi_text() {
         let html = r#"
@@ -441,7 +446,7 @@ mod tests {
         assert!(result.contains("שלום עולם"));
         assert!(result.contains("Hello שלום مرحبا World"));
     }
-    
+
     #[test]
     fn test_very_large_array() {
         let html = r#"
@@ -452,21 +457,19 @@ mod tests {
             </template>
         "#;
         let template = HtmlTemplate::from_str(html, None).unwrap();
-        
+
         // Create array with 10000 elements
-        let items: Vec<_> = (0..10000)
-            .map(|i| json!({"index": i}))
-            .collect();
-        
+        let items: Vec<_> = (0..10000).map(|i| json!({"index": i})).collect();
+
         let data = json!({"items": items});
         let result = template.render(&data).unwrap();
-        
+
         // Should render all items
         assert!(result.contains("0"));
         assert!(result.contains("9999"));
         assert_eq!(result.matches("<li").count(), 10000);
     }
-    
+
     #[test]
     fn test_conflicting_property_targets() {
         // When the same property is used for both text and attribute

@@ -14,7 +14,7 @@ fn test_simple_array_rendering() {
             </ul>
         </template>
     "#;
-    
+
     let template = HtmlTemplate::from_str(html, Some("ul")).unwrap();
     let data = json!({
         "items": [
@@ -23,14 +23,14 @@ fn test_simple_array_rendering() {
             {"name": "Item 3"}
         ]
     });
-    
+
     let result = template.render(&data).unwrap();
-    
+
     // All items should be rendered
     assert!(result.contains("Item 1"));
     assert!(result.contains("Item 2"));
     assert!(result.contains("Item 3"));
-    
+
     // Should have 3 li elements
     assert_eq!(result.matches("<li").count(), 3);
 }
@@ -51,7 +51,7 @@ fn test_array_with_complex_elements() {
             </div>
         </template>
     "#;
-    
+
     let template = HtmlTemplate::from_str(html, None).unwrap();
     let data = json!({
         "users": [
@@ -65,7 +65,7 @@ fn test_array_with_complex_elements() {
             },
             {
                 "name": "Bob",
-                "email": "bob@example.com", 
+                "email": "bob@example.com",
                 "age": 25,
                 "tags": "designer, ui",
                 "ageInfo": "placeholder",
@@ -73,21 +73,21 @@ fn test_array_with_complex_elements() {
             }
         ]
     });
-    
+
     let result = template.render(&data).unwrap();
-    
+
     // Check Alice's data
     assert!(result.contains("Alice"));
     assert!(result.contains("alice@example.com"));
     assert!(result.contains("Age: 30"));
     assert!(result.contains("Tags: developer, rust"));
-    
+
     // Check Bob's data
     assert!(result.contains("Bob"));
     assert!(result.contains("bob@example.com"));
     assert!(result.contains("Age: 25"));
     assert!(result.contains("Tags: designer, ui"));
-    
+
     // Check structure
     assert_eq!(result.matches(r#"class="user""#).count(), 2);
     assert!(result.contains(r#"href="mailto:alice@example.com""#));
@@ -106,16 +106,16 @@ fn test_empty_array() {
             </div>
         </template>
     "#;
-    
+
     let template = HtmlTemplate::from_str(html, None).unwrap();
     let data = json!({
         "items": [],
         "itemCount": 0,
         "summary": "placeholder"
     });
-    
+
     let result = template.render(&data).unwrap();
-    
+
     // Should not have any li elements
     assert!(!result.contains("<li"));
     assert!(result.contains("Total items: 0"));
@@ -137,7 +137,7 @@ fn test_nested_object_with_itemscope() {
             </article>
         </template>
     "#;
-    
+
     let template = HtmlTemplate::from_str(html, Some("article")).unwrap();
     let data = json!({
         "title": "Understanding Nested Data",
@@ -149,9 +149,9 @@ fn test_nested_object_with_itemscope() {
         },
         "content": "This article explains nested data structures..."
     });
-    
+
     let result = template.render(&data).unwrap();
-    
+
     assert!(result.contains("Understanding Nested Data"));
     assert!(result.contains("John Doe"));
     assert!(result.contains("john@example.com"));
@@ -176,7 +176,7 @@ fn test_nested_arrays() {
             </div>
         </template>
     "#;
-    
+
     let template = HtmlTemplate::from_str(html, None).unwrap();
     let data = json!({
         "categories": [
@@ -198,21 +198,21 @@ fn test_nested_arrays() {
             }
         ]
     });
-    
+
     let result = template.render(&data).unwrap();
-    
+
     // Check categories
     assert!(result.contains("Electronics"));
     assert!(result.contains("Latest gadgets"));
     assert!(result.contains("Books"));
     assert!(result.contains("Educational and fiction"));
-    
+
     // Check items
     assert!(result.contains("Laptop"));
     assert!(result.contains("$999"));
     assert!(result.contains("Rust Programming"));
     assert!(result.contains("$45"));
-    
+
     // Check structure
     assert_eq!(result.matches(r#"class="category""#).count(), 2);
     assert_eq!(result.matches("<li>").count(), 4);
@@ -231,7 +231,7 @@ fn test_array_with_mixed_content() {
             </div>
         </template>
     "#;
-    
+
     let template = HtmlTemplate::from_str(html, None).unwrap();
     let data = json!({
         "items": [
@@ -252,20 +252,20 @@ fn test_array_with_mixed_content() {
             }
         ]
     });
-    
+
     let result = template.render(&data).unwrap();
-    
+
     // All items should be rendered
     assert_eq!(result.matches(r#"class="item""#).count(), 3);
-    
+
     // Check content
     assert!(result.contains("First Item"));
     assert!(result.contains("Has all properties"));
     assert!(result.contains("complete"));
-    
+
     assert!(result.contains("Second Item"));
     assert!(result.contains("partial"));
-    
+
     assert!(result.contains("Only description"));
     assert!(result.contains("minimal"));
 }
@@ -291,7 +291,7 @@ fn test_deeply_nested_structure() {
             </div>
         </template>
     "#;
-    
+
     let template = HtmlTemplate::from_str(html, None).unwrap();
     let data = json!({
         "name": "Tech Corp",
@@ -321,9 +321,9 @@ fn test_deeply_nested_structure() {
             }
         ]
     });
-    
+
     let result = template.render(&data).unwrap();
-    
+
     // Check all levels
     assert!(result.contains("Tech Corp"));
     assert!(result.contains("Engineering"));
@@ -345,14 +345,14 @@ fn test_array_without_itemprop_content() {
             </div>
         </template>
     "#;
-    
+
     let template = HtmlTemplate::from_str(html, None).unwrap();
     let data = json!({
         "messages": ["Hello", "World", "Test"]
     });
-    
+
     let result = template.render(&data).unwrap();
-    
+
     // Should render three p elements
     assert_eq!(result.matches("<p").count(), 3);
     // Content might be rendered based on implementation
@@ -367,14 +367,14 @@ fn test_single_item_as_array() {
             </ul>
         </template>
     "#;
-    
+
     let template = HtmlTemplate::from_str(html, None).unwrap();
     let data = json!({
         "items": {"name": "Single item treated as array"}
     });
-    
+
     let result = template.render(&data).unwrap();
-    
+
     // Single object should be treated as array of one
     assert!(result.contains("Single item treated as array"));
     assert_eq!(result.matches("<li").count(), 1);

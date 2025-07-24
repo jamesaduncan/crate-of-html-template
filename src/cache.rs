@@ -1,14 +1,14 @@
 //! Caching system for templates, compiled templates, and external resources
-//! 
+//!
 //! This module provides multiple cache types to improve performance by avoiding
 //! repeated parsing, compilation, and network requests.
 
 use std::collections::HashMap;
-use std::sync::{Arc, RwLock};
+use std::hash::Hash;
+use std::sync::{Arc, OnceLock, RwLock};
 use std::time::{Duration, Instant};
-use std::hash::{Hash, Hasher};
 
-use crate::error::{Error, Result};
+use crate::error::Result;
 use crate::types::*;
 
 /// Cache entry with expiration support
@@ -33,7 +33,7 @@ impl<T> CacheEntry<T> {
             last_accessed: now,
         }
     }
-    
+
     /// Check if this entry has expired
     pub fn is_expired(&self) -> bool {
         if let Some(expires_at) = self.expires_at {
@@ -42,13 +42,13 @@ impl<T> CacheEntry<T> {
             false
         }
     }
-    
+
     /// Mark this entry as accessed
     pub fn mark_accessed(&mut self) {
         self.access_count += 1;
         self.last_accessed = Instant::now();
     }
-    
+
     /// Get the age of this entry
     pub fn age(&self) -> Duration {
         Instant::now().duration_since(self.created_at)
@@ -84,7 +84,11 @@ where
     V: Clone,
 {
     /// Create a new cache with the given configuration
-    pub fn new(max_size: usize, default_ttl: Option<Duration>, eviction_strategy: EvictionStrategy) -> Self {
+    pub fn new(
+        max_size: usize,
+        default_ttl: Option<Duration>,
+        eviction_strategy: EvictionStrategy,
+    ) -> Self {
         Self {
             entries: HashMap::new(),
             max_size,
@@ -94,31 +98,33 @@ where
             misses: 0,
         }
     }
-    
+
     /// Insert a value into the cache
     pub fn insert(&mut self, key: K, value: V) -> Option<V> {
         self.insert_with_ttl(key, value, self.default_ttl)
     }
-    
+
     /// Insert a value with a specific TTL
     pub fn insert_with_ttl(&mut self, key: K, value: V, ttl: Option<Duration>) -> Option<V> {
         // Remove expired entries first
         self.cleanup_expired();
-        
+
         // If at capacity, evict based on strategy
         if self.entries.len() >= self.max_size && !self.entries.contains_key(&key) {
             self.evict_one();
         }
-        
+
         let entry = CacheEntry::new(value, ttl);
-        self.entries.insert(key, entry).map(|old_entry| old_entry.value)
+        self.entries
+            .insert(key, entry)
+            .map(|old_entry| old_entry.value)
     }
-    
+
     /// Get a value from the cache
     pub fn get(&mut self, key: &K) -> Option<V> {
         // Remove expired entries first
         self.cleanup_expired();
-        
+
         if let Some(entry) = self.entries.get_mut(key) {
             if entry.is_expired() {
                 self.entries.remove(key);
@@ -134,7 +140,7 @@ where
             None
         }
     }
-    
+
     /// Check if a key exists in the cache (without affecting access statistics)
     pub fn contains_key(&self, key: &K) -> bool {
         if let Some(entry) = self.entries.get(key) {
@@ -143,19 +149,19 @@ where
             false
         }
     }
-    
+
     /// Remove a specific key from the cache
     pub fn remove(&mut self, key: &K) -> Option<V> {
         self.entries.remove(key).map(|entry| entry.value)
     }
-    
+
     /// Clear all entries from the cache
     pub fn clear(&mut self) {
         self.entries.clear();
         self.hits = 0;
         self.misses = 0;
     }
-    
+
     /// Get cache statistics
     pub fn stats(&self) -> CacheStats {
         CacheStats {
@@ -170,7 +176,7 @@ where
             max_size: self.max_size,
         }
     }
-    
+
     /// Remove expired entries
     fn cleanup_expired(&mut self) {
         let now = Instant::now();
@@ -182,29 +188,32 @@ where
             }
         });
     }
-    
+
     /// Evict one entry based on the eviction strategy
     fn evict_one(&mut self) {
         if self.entries.is_empty() {
             return;
         }
-        
+
         let key_to_remove = match self.eviction_strategy {
             EvictionStrategy::LRU => {
                 // Find least recently used
-                self.entries.iter()
+                self.entries
+                    .iter()
                     .min_by_key(|(_, entry)| entry.last_accessed)
                     .map(|(k, _)| k.clone())
             }
             EvictionStrategy::LFU => {
                 // Find least frequently used
-                self.entries.iter()
+                self.entries
+                    .iter()
                     .min_by_key(|(_, entry)| entry.access_count)
                     .map(|(k, _)| k.clone())
             }
             EvictionStrategy::FIFO => {
                 // Find oldest entry
-                self.entries.iter()
+                self.entries
+                    .iter()
                     .min_by_key(|(_, entry)| entry.created_at)
                     .map(|(k, _)| k.clone())
             }
@@ -213,7 +222,7 @@ where
                 self.entries.keys().next().cloned()
             }
         };
-        
+
         if let Some(key) = key_to_remove {
             self.entries.remove(&key);
         }
@@ -260,7 +269,7 @@ impl DocumentCacheKey {
             headers: Vec::new(),
         }
     }
-    
+
     pub fn with_headers(url: &str, headers: Vec<(String, String)>) -> Self {
         let mut sorted_headers = headers;
         sorted_headers.sort();
@@ -294,7 +303,7 @@ impl TemplateCache {
     pub fn new() -> Self {
         Self::with_config(CacheConfig::default())
     }
-    
+
     /// Create a new template cache with custom configuration
     pub fn with_config(config: CacheConfig) -> Self {
         Self {
@@ -316,9 +325,13 @@ impl TemplateCache {
             // css_selectors disabled
         }
     }
-    
+
     /// Get or create a parsed template
-    pub fn get_or_parse_template<F>(&self, key: &TemplateCacheKey, parser: F) -> Result<HtmlTemplate>
+    pub fn get_or_parse_template<F>(
+        &self,
+        key: &TemplateCacheKey,
+        parser: F,
+    ) -> Result<HtmlTemplate>
     where
         F: FnOnce() -> Result<HtmlTemplate>,
     {
@@ -328,20 +341,24 @@ impl TemplateCache {
                 return Ok(template);
             }
         }
-        
+
         // Not in cache, parse it
         let template = parser()?;
-        
+
         // Store in cache
         if let Ok(mut cache) = self.parsed_templates.write() {
             cache.insert(key.clone(), template.clone());
         }
-        
+
         Ok(template)
     }
-    
+
     /// Get or create a compiled template
-    pub fn get_or_compile_template<F>(&self, key: &TemplateCacheKey, compiler: F) -> Result<Arc<CompiledTemplate>>
+    pub fn get_or_compile_template<F>(
+        &self,
+        key: &TemplateCacheKey,
+        compiler: F,
+    ) -> Result<Arc<CompiledTemplate>>
     where
         F: FnOnce() -> Result<Arc<CompiledTemplate>>,
     {
@@ -351,20 +368,24 @@ impl TemplateCache {
                 return Ok(template);
             }
         }
-        
+
         // Not in cache, compile it
         let template = compiler()?;
-        
+
         // Store in cache
         if let Ok(mut cache) = self.compiled_templates.write() {
             cache.insert(key.clone(), template.clone());
         }
-        
+
         Ok(template)
     }
-    
+
     /// Get or fetch an external document
-    pub fn get_or_fetch_document<F>(&self, key: &DocumentCacheKey, fetcher: F) -> Result<CachedDocument>
+    pub fn get_or_fetch_document<F>(
+        &self,
+        key: &DocumentCacheKey,
+        fetcher: F,
+    ) -> Result<CachedDocument>
     where
         F: FnOnce() -> Result<CachedDocument>,
     {
@@ -374,21 +395,21 @@ impl TemplateCache {
                 return Ok(document);
             }
         }
-        
+
         // Not in cache, fetch it
         let document = fetcher()?;
-        
+
         // Store in cache
         if let Ok(mut cache) = self.external_documents.write() {
             cache.insert(key.clone(), document.clone());
         }
-        
+
         Ok(document)
     }
-    
+
     // CSS selector caching methods disabled due to lifetime issues
     // TODO: Implement CSS selector caching with proper lifetime management
-    
+
     /// Clear all caches
     pub fn clear_all(&self) {
         if let Ok(mut cache) = self.parsed_templates.write() {
@@ -402,20 +423,26 @@ impl TemplateCache {
         }
         // css_selectors disabled
     }
-    
+
     /// Get comprehensive cache statistics
     pub fn get_stats(&self) -> TemplateCacheStats {
-        let parsed_stats = self.parsed_templates.read()
+        let parsed_stats = self
+            .parsed_templates
+            .read()
             .map(|cache| cache.stats())
             .unwrap_or_default();
-        let compiled_stats = self.compiled_templates.read()
+        let compiled_stats = self
+            .compiled_templates
+            .read()
             .map(|cache| cache.stats())
             .unwrap_or_default();
-        let document_stats = self.external_documents.read()
+        let document_stats = self
+            .external_documents
+            .read()
             .map(|cache| cache.stats())
             .unwrap_or_default();
         let selector_stats = CacheStats::default(); // css_selectors disabled
-        
+
         TemplateCacheStats {
             parsed_templates: parsed_stats,
             compiled_templates: compiled_stats,
@@ -485,35 +512,34 @@ pub struct TemplateCacheStats {
 impl TemplateCacheStats {
     /// Calculate overall hit rate across all caches
     pub fn overall_hit_rate(&self) -> f64 {
-        let total_hits = self.parsed_templates.hits + 
-                        self.compiled_templates.hits + 
-                        self.external_documents.hits + 
-                        self.css_selectors.hits;
-        let total_requests = total_hits + 
-                           self.parsed_templates.misses + 
-                           self.compiled_templates.misses + 
-                           self.external_documents.misses + 
-                           self.css_selectors.misses;
-        
+        let total_hits = self.parsed_templates.hits
+            + self.compiled_templates.hits
+            + self.external_documents.hits
+            + self.css_selectors.hits;
+        let total_requests = total_hits
+            + self.parsed_templates.misses
+            + self.compiled_templates.misses
+            + self.external_documents.misses
+            + self.css_selectors.misses;
+
         if total_requests > 0 {
             total_hits as f64 / total_requests as f64
         } else {
             0.0
         }
     }
-    
+
     /// Get total memory usage estimate (rough)
     pub fn total_entries(&self) -> usize {
-        self.parsed_templates.entry_count + 
-        self.compiled_templates.entry_count + 
-        self.external_documents.entry_count + 
-        self.css_selectors.entry_count
+        self.parsed_templates.entry_count
+            + self.compiled_templates.entry_count
+            + self.external_documents.entry_count
+            + self.css_selectors.entry_count
     }
 }
 
-/// Global cache instance
-static mut GLOBAL_CACHE: Option<TemplateCache> = None;
-static mut CACHE_INITIALIZED: bool = false;
+/// Global cache instance - thread-safe initialization
+static GLOBAL_CACHE: OnceLock<TemplateCache> = OnceLock::new();
 
 /// Initialize the global cache with default settings
 pub fn init_global_cache() {
@@ -522,22 +548,12 @@ pub fn init_global_cache() {
 
 /// Initialize the global cache with custom configuration
 pub fn init_global_cache_with_config(config: CacheConfig) {
-    unsafe {
-        if !CACHE_INITIALIZED {
-            GLOBAL_CACHE = Some(TemplateCache::with_config(config));
-            CACHE_INITIALIZED = true;
-        }
-    }
+    let _ = GLOBAL_CACHE.set(TemplateCache::with_config(config));
 }
 
 /// Get the global cache instance
 pub fn get_global_cache() -> &'static TemplateCache {
-    unsafe {
-        if !CACHE_INITIALIZED {
-            init_global_cache();
-        }
-        GLOBAL_CACHE.as_ref().unwrap()
-    }
+    GLOBAL_CACHE.get_or_init(|| TemplateCache::with_config(CacheConfig::default()))
 }
 
 /// Clear the global cache
@@ -554,104 +570,104 @@ pub fn get_global_cache_stats() -> TemplateCacheStats {
 mod tests {
     use super::*;
     use std::thread;
-    
+
     #[test]
     fn test_cache_basic_operations() {
         let mut cache = Cache::new(3, None, EvictionStrategy::LRU);
-        
+
         // Insert and retrieve
         cache.insert("key1", "value1");
         assert_eq!(cache.get(&"key1"), Some("value1"));
         assert_eq!(cache.get(&"nonexistent"), None);
-        
+
         // Check statistics
         let stats = cache.stats();
         assert_eq!(stats.hits, 1);
         assert_eq!(stats.misses, 1);
         assert_eq!(stats.entry_count, 1);
     }
-    
+
     #[test]
     fn test_cache_eviction() {
         let mut cache = Cache::new(2, None, EvictionStrategy::LRU);
-        
+
         cache.insert("key1", "value1");
         cache.insert("key2", "value2");
         cache.insert("key3", "value3"); // Should evict key1
-        
+
         assert_eq!(cache.get(&"key1"), None);
         assert_eq!(cache.get(&"key2"), Some("value2"));
         assert_eq!(cache.get(&"key3"), Some("value3"));
     }
-    
+
     #[test]
     fn test_cache_expiration() {
         let mut cache = Cache::new(10, None, EvictionStrategy::LRU);
-        
+
         // Insert with very short TTL
         cache.insert_with_ttl("key1", "value1", Some(Duration::from_millis(1)));
-        
+
         // Wait for expiration
         thread::sleep(Duration::from_millis(5));
-        
+
         // Should be expired
         assert_eq!(cache.get(&"key1"), None);
     }
-    
+
     #[test]
     fn test_cache_entry_lifecycle() {
         let entry = CacheEntry::new("test_value", Some(Duration::from_secs(60)));
-        
+
         assert!(!entry.is_expired());
         assert!(entry.age() < Duration::from_secs(1));
         assert_eq!(entry.access_count, 0);
     }
-    
+
     #[test]
     fn test_template_cache_key() {
         let key1 = TemplateCacheKey::new("<template>test</template>", Some("div"));
         let key2 = TemplateCacheKey::new("<template>test</template>", Some("div"));
         let key3 = TemplateCacheKey::new("<template>other</template>", Some("div"));
-        
+
         assert_eq!(key1, key2);
         assert_ne!(key1, key3);
     }
-    
+
     #[test]
     fn test_document_cache_key() {
         let key1 = DocumentCacheKey::new("https://example.com/test");
         let key2 = DocumentCacheKey::with_headers(
             "https://example.com/test",
-            vec![("accept".to_string(), "text/html".to_string())]
+            vec![("accept".to_string(), "text/html".to_string())],
         );
-        
+
         assert_ne!(key1, key2);
-        
+
         let key3 = DocumentCacheKey::with_headers(
             "https://example.com/test",
-            vec![("accept".to_string(), "text/html".to_string())]
+            vec![("accept".to_string(), "text/html".to_string())],
         );
         assert_eq!(key2, key3);
     }
-    
+
     #[test]
     fn test_template_cache_operations() {
         let cache = TemplateCache::new();
         let key = TemplateCacheKey::new("<template>test</template>", None);
-        
+
         // Test that we can create cache instances
         assert!(cache.parsed_templates.read().is_ok());
         assert!(cache.compiled_templates.read().is_ok());
         assert!(cache.external_documents.read().is_ok());
         // css_selectors disabled
     }
-    
+
     #[test]
     fn test_cache_config() {
         let config = CacheConfig::default();
         assert_eq!(config.template_cache_size, 100);
         assert_eq!(config.eviction_strategy as u8, EvictionStrategy::LRU as u8);
-        
+
         let custom_config = CacheConfig {
             template_cache_size: 50,
             eviction_strategy: EvictionStrategy::FIFO,
@@ -659,7 +675,7 @@ mod tests {
         };
         assert_eq!(custom_config.template_cache_size, 50);
     }
-    
+
     #[test]
     fn test_cache_stats() {
         let stats = TemplateCacheStats {
@@ -680,22 +696,22 @@ mod tests {
             external_documents: CacheStats::default(),
             css_selectors: CacheStats::default(),
         };
-        
+
         assert_eq!(stats.total_entries(), 23);
         assert!((stats.overall_hit_rate() - 0.67).abs() < 0.01);
     }
-    
+
     #[test]
     fn test_global_cache() {
         // Test that global cache can be initialized and accessed
         init_global_cache();
         let cache = get_global_cache();
-        
+
         // Clear any existing entries from other tests
         cache.clear_all();
-        
+
         let stats = cache.get_stats();
-        
+
         // Should have no entries after clearing
         assert_eq!(stats.total_entries(), 0);
     }

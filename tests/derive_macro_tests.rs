@@ -1,6 +1,6 @@
 //! Tests for the Renderable derive macro
-//! 
-//! These tests verify that the derive macro correctly generates RenderValue 
+//!
+//! These tests verify that the derive macro correctly generates RenderValue
 //! implementations for various struct patterns.
 
 use html_template::*;
@@ -36,7 +36,10 @@ mod derive_tests {
             "30"
         );
         assert_eq!(
-            person.get_property(&["email".to_string()]).unwrap().as_ref(),
+            person
+                .get_property(&["email".to_string()])
+                .unwrap()
+                .as_ref(),
             "alice@example.com"
         );
 
@@ -67,12 +70,12 @@ mod derive_tests {
     struct PersonWithCustomAttributes {
         #[renderable(id)]
         user_id: String,
-        
+
         #[renderable(rename = "fullName")]
         name: String,
-        
+
         age: u32,
-        
+
         #[renderable(skip)]
         password: String,
     }
@@ -88,10 +91,13 @@ mod derive_tests {
 
         // Test renamed property
         assert_eq!(
-            person.get_property(&["fullName".to_string()]).unwrap().as_ref(),
+            person
+                .get_property(&["fullName".to_string()])
+                .unwrap()
+                .as_ref(),
             "Charlie"
         );
-        
+
         // Original name should not work
         assert!(person.get_property(&["name".to_string()]).is_none());
 
@@ -109,7 +115,10 @@ mod derive_tests {
 
         // User ID should still be accessible as property
         assert_eq!(
-            person.get_property(&["user_id".to_string()]).unwrap().as_ref(),
+            person
+                .get_property(&["user_id".to_string()])
+                .unwrap()
+                .as_ref(),
             "123"
         );
     }
@@ -129,7 +138,7 @@ mod derive_tests {
 
         // Test automatic id detection
         assert_eq!(person.get_id(), Some("person-456"));
-        
+
         // ID should also be accessible as property
         assert_eq!(
             person.get_property(&["id".to_string()]).unwrap().as_ref(),
@@ -205,21 +214,33 @@ mod derive_tests {
 
         // Test present optional fields
         assert_eq!(
-            person_with_nickname.get_property(&["nickname".to_string()]).unwrap().as_ref(),
+            person_with_nickname
+                .get_property(&["nickname".to_string()])
+                .unwrap()
+                .as_ref(),
             "Frankie"
         );
         assert_eq!(
-            person_with_nickname.get_property(&["age".to_string()]).unwrap().as_ref(),
+            person_with_nickname
+                .get_property(&["age".to_string()])
+                .unwrap()
+                .as_ref(),
             "28"
         );
 
         // Test absent optional fields (should return empty string)
         assert_eq!(
-            person_without_nickname.get_property(&["nickname".to_string()]).unwrap().as_ref(),
+            person_without_nickname
+                .get_property(&["nickname".to_string()])
+                .unwrap()
+                .as_ref(),
             ""
         );
         assert_eq!(
-            person_without_nickname.get_property(&["age".to_string()]).unwrap().as_ref(),
+            person_without_nickname
+                .get_property(&["age".to_string()])
+                .unwrap()
+                .as_ref(),
             ""
         );
     }
