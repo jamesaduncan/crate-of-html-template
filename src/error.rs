@@ -22,7 +22,7 @@ pub enum Error {
     JsonError(#[from] serde_json::Error),
     
     #[error("HTTP error: {0}")]
-    HttpError(#[from] reqwest::Error),
+    HttpError(Cow<'static, str>),
     
     #[error("IO error: {0}")]
     IoError(#[from] std::io::Error),
@@ -77,6 +77,17 @@ impl Error {
     /// Create a selector error with an owned string
     pub fn selector_owned(msg: String) -> Self {
         Error::SelectorError(Cow::Owned(msg))
+    }
+    
+    /// Create a parse error (alias for compatibility)
+    pub fn parse(msg: String) -> Self {
+        Self::parse_owned(msg)
+    }
+    
+    /// Create an IO error (alias for compatibility)
+    pub fn io(msg: String) -> Self {
+        let io_err = std::io::Error::new(std::io::ErrorKind::Other, msg);
+        Error::IoError(io_err)
     }
 }
 

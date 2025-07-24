@@ -5,11 +5,24 @@ use dom_query::Document;
 use crate::handlers::ElementHandler;
 use crate::error::{Error, Result};
 use crate::value::RenderValue;
+use crate::cache::{TemplateCache, TemplateCacheKey, get_global_cache};
 
 pub struct HtmlTemplate {
     pub(crate) compiled: Arc<CompiledTemplate>,
     pub(crate) config: TemplateConfig,
     pub(crate) handlers: HashMap<String, Box<dyn ElementHandler>>,
+}
+
+impl Clone for HtmlTemplate {
+    fn clone(&self) -> Self {
+        Self {
+            compiled: self.compiled.clone(),
+            config: self.config.clone(),
+            // Note: handlers are not cloned as ElementHandler doesn't implement Clone
+            // This means cached templates will have empty handlers
+            handlers: HashMap::new(),
+        }
+    }
 }
 
 impl std::fmt::Debug for HtmlTemplate {
@@ -38,8 +51,44 @@ impl HtmlTemplate {
     
     /// Create a template from HTML string and selector
     pub fn from_str(html: &str, selector: Option<&str>) -> Result<Self> {
-        let compiled = crate::compiler::Compiler::compile(html, selector)?;
-        Ok(Self::new(compiled, TemplateConfig::default(), std::collections::HashMap::new()))
+        Self::from_str_with_config(html, selector, TemplateConfig::default())
+    }
+    
+    /// Create a template from HTML string with custom configuration
+    pub fn from_str_with_config(html: &str, selector: Option<&str>, config: TemplateConfig) -> Result<Self> {
+        let compiled = if config.cache_mode != CacheMode::None {
+            // Use caching
+            let cache_key = TemplateCacheKey::new(html, selector);
+            let cache = get_global_cache();
+            
+            cache.get_or_compile_template(&cache_key, || {
+                crate::compiler::Compiler::compile(html, selector)
+            })?
+        } else {
+            // Direct compilation without caching
+            crate::compiler::Compiler::compile(html, selector)?
+        };
+        
+        Ok(Self::new(compiled, config, std::collections::HashMap::new()))
+    }
+    
+    /// Create a template from HTML string using a custom cache
+    pub fn from_str_with_cache(
+        html: &str,
+        selector: Option<&str>,
+        config: TemplateConfig,
+        cache: &TemplateCache,
+    ) -> Result<Self> {
+        let compiled = if config.cache_mode != CacheMode::None {
+            let cache_key = TemplateCacheKey::new(html, selector);
+            cache.get_or_compile_template(&cache_key, || {
+                crate::compiler::Compiler::compile(html, selector)
+            })?
+        } else {
+            crate::compiler::Compiler::compile(html, selector)?
+        };
+        
+        Ok(Self::new(compiled, config, std::collections::HashMap::new()))
     }
     
     /// Render the template with the given data
@@ -123,13 +172,74 @@ pub struct Variable {
 pub struct TemplateConfig {
     pub(crate) cache_mode: CacheMode,
     pub(crate) zero_copy: bool,
+    pub(crate) cache_compiled_templates: bool,
+    pub(crate) cache_external_documents: bool,
+}
+
+impl TemplateConfig {
+    /// Create a new template configuration
+    pub fn new() -> Self {
+        Self::default()
+    }
+    
+    /// Set the cache mode
+    pub fn with_cache_mode(mut self, mode: CacheMode) -> Self {
+        self.cache_mode = mode;
+        self
+    }
+    
+    /// Enable or disable zero-copy optimizations
+    pub fn with_zero_copy(mut self, enabled: bool) -> Self {
+        self.zero_copy = enabled;
+        self
+    }
+    
+    /// Enable or disable compiled template caching
+    pub fn with_compiled_template_caching(mut self, enabled: bool) -> Self {
+        self.cache_compiled_templates = enabled;
+        self
+    }
+    
+    /// Enable or disable external document caching
+    pub fn with_external_document_caching(mut self, enabled: bool) -> Self {
+        self.cache_external_documents = enabled;
+        self
+    }
+    
+    /// Create configuration for aggressive caching
+    pub fn aggressive_caching() -> Self {
+        Self {
+            cache_mode: CacheMode::Aggressive,
+            zero_copy: true,
+            cache_compiled_templates: true,
+            cache_external_documents: true,
+        }
+    }
+    
+    /// Create configuration with no caching
+    pub fn no_caching() -> Self {
+        Self {
+            cache_mode: CacheMode::None,
+            zero_copy: true,
+            cache_compiled_templates: false,
+            cache_external_documents: false,
+        }
+    }
+    
+    // Accessors
+    pub fn cache_mode(&self) -> CacheMode { self.cache_mode }
+    pub fn zero_copy(&self) -> bool { self.zero_copy }
+    pub fn cache_compiled_templates(&self) -> bool { self.cache_compiled_templates }
+    pub fn cache_external_documents(&self) -> bool { self.cache_external_documents }
 }
 
 impl Default for TemplateConfig {
     fn default() -> Self {
         Self {
             cache_mode: CacheMode::Normal,
-            zero_copy: false,
+            zero_copy: true,
+            cache_compiled_templates: true,
+            cache_external_documents: true,
         }
     }
 }
@@ -172,8 +282,8 @@ mod tests {
     #[test]
     fn test_template_config_default() {
         let config = TemplateConfig::default();
-        assert_eq!(config.cache_mode, CacheMode::Normal);
-        assert_eq!(config.zero_copy, false);
+        assert_eq!(config.cache_mode(), CacheMode::Normal);
+        assert_eq!(config.zero_copy(), true);
     }
     
     #[test]

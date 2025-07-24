@@ -17,6 +17,7 @@ use crate::handlers::ElementHandler;
 use crate::node_ext::NodeExt;
 use crate::constraints::{ConstraintContext, ConstraintEvaluator};
 use crate::utils::{replace_multiple_cow, split_path_cow, with_string_buffer};
+use crate::cache::get_global_cache;
 
 static VARIABLE_REGEX: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r"\$\{([^}]+)\}").expect("Invalid variable regex")
@@ -515,6 +516,13 @@ impl<'a> Renderer<'a> {
             }
             buffer.clone()
         })
+    }
+    
+    /// Perform CSS selector query with optional caching
+    fn cached_select<'s>(&self, root: &'s Selection, selector: &str, _use_cache: bool) -> Selection<'s> {
+        // Note: Caching disabled for now due to lifetime complexity
+        // TODO: Implement proper selector result caching
+        root.select(selector)
     }
 }
 

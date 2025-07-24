@@ -45,6 +45,8 @@ pub mod constraints;
 pub mod microdata;
 pub mod streaming;
 pub mod utils;
+pub mod cache;
+pub mod cross_document;
 
 // Re-export commonly used types
 pub use error::{Error, Result};
@@ -52,6 +54,11 @@ pub use types::{HtmlTemplate, TemplateConfig, CacheMode};
 pub use value::RenderValue;
 pub use handlers::ElementHandler;
 pub use streaming::{StreamingRenderer, StreamingResult, OwnedStreamingResult};
+pub use cache::{TemplateCache, CacheConfig, CacheStats, TemplateCacheStats, EvictionStrategy};
+pub use cross_document::{
+    CrossDocumentRenderer, DocumentFetcher, CrossDocumentConfig, CrossDocumentTemplate,
+    DataSource, CrossDocumentRequest, CrossDocumentResponse, CrossDocumentMetadata
+};
 
 // Re-export derive macro when implemented
 #[cfg(feature = "derive")]
