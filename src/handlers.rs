@@ -1,3 +1,82 @@
+//! Element handlers for specialized template rendering
+//!
+//! This module provides the element handler system that allows customization of how
+//! different HTML elements are processed during template rendering. Handlers can
+//! modify element behavior, add special processing logic, or integrate with external systems.
+//!
+//! # Element Handler System
+//!
+//! The handler system is built around the [`ElementHandler`] trait, which defines
+//! how specific elements should be processed. Handlers are registered with templates
+//! and execute in priority order during rendering.
+//!
+//! # Built-in Handlers
+//!
+//! The crate provides several built-in handlers for common HTML elements:
+//!
+//! - [`InputHandler`] - Sets `value` attribute on input elements
+//! - [`SelectHandler`] - Sets `selected` attribute on matching option elements
+//! - [`TextareaHandler`] - Sets text content with proper HTML escaping
+//! - [`MetaHandler`] - Sets `content` attribute on meta elements
+//!
+//! # Custom Handlers
+//!
+//! Create custom handlers by implementing the [`ElementHandler`] trait:
+//!
+//! ```rust,ignore
+//! use html_template::{ElementHandler, RenderValue};
+//! use dom_query::Selection;
+//!
+//! struct LoggingHandler;
+//!
+//! impl ElementHandler for LoggingHandler {
+//!     fn can_handle(&self, element: &Selection) -> bool {
+//!         // Handle all elements for logging
+//!         true
+//!     }
+//!     
+//!     fn handle(&self, element: &Selection, value: &dyn RenderValue) -> html_template::Result<()> {
+//!         println!("Processing element: {:?}", element.node_name());
+//!         Ok(())
+//!     }
+//! }
+//! ```
+//!
+//! # Handler Priority and Chaining
+//!
+//! Handlers can specify execution priority and whether other handlers should run:
+//!
+//! ```rust,ignore
+//! impl ElementHandler for MyHandler {
+//!     fn priority(&self) -> i32 {
+//!         10 // Higher priority handlers run first
+//!     }
+//!     
+//!     fn allows_chaining(&self) -> bool {
+//!         false // Stop processing after this handler
+//!     }
+//! }
+//! ```
+//!
+//! # Handler Registration
+//!
+//! Handlers are registered using the builder pattern or handler registry:
+//!
+//! ```rust,ignore
+//! use html_template::{HtmlTemplateBuilder, HandlerRegistry};
+//!
+//! // Using builder pattern
+//! let template = HtmlTemplateBuilder::new()
+//!     .from_str(html)
+//!     .with_default_handlers()
+//!     .register_handler("input", Box::new(CustomInputHandler))
+//!     .build()?;
+//!
+//! // Using handler registry
+//! let mut registry = HandlerRegistry::new();
+//! registry.register("input", Box::new(CustomInputHandler));
+//! ```
+
 use std::collections::BTreeMap;
 use std::borrow::Cow;
 use dom_query::Selection;
@@ -5,24 +84,193 @@ use dom_query::Selection;
 use crate::error::Result;
 use crate::value::RenderValue;
 
+/// Trait for custom element handlers in template rendering
+///
+/// Element handlers provide a way to customize how specific HTML elements
+/// are processed during template rendering. This enables specialized behavior
+/// for form elements, metadata elements, and custom processing logic.
+///
+/// # Handler Lifecycle
+///
+/// 1. [`can_handle`] is called to determine if this handler applies to an element
+/// 2. If multiple handlers can handle an element, they are sorted by [`priority`]
+/// 3. Each applicable handler's [`handle`] method is called in priority order
+/// 4. If a handler returns `allows_chaining() = false`, processing stops
+///
+/// # Thread Safety
+///
+/// Handlers must be `Send + Sync` as they may be used across multiple threads
+/// in concurrent rendering scenarios.
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// use html_template::{ElementHandler, RenderValue, Result};
+/// use dom_query::Selection;
+///
+/// struct CustomButtonHandler;
+///
+/// impl ElementHandler for CustomButtonHandler {
+///     fn can_handle(&self, element: &Selection) -> bool {
+///         element.nodes().iter().any(|node| {
+///             node.node_name()
+///                 .map(|name| name.to_lowercase() == "button")
+///                 .unwrap_or(false)
+///         })
+///     }
+///
+///     fn handle(&self, element: &Selection, value: &dyn RenderValue) -> Result<()> {
+///         if let Some(text) = value.get_property(&[]) {
+///             element.set_text(&text);
+///             element.set_attr("type", "button");
+///         }
+///         Ok(())
+///     }
+///
+///     fn priority(&self) -> i32 {
+///         5 // Medium priority
+///     }
+/// }
+/// ```
+///
+/// [`can_handle`]: ElementHandler::can_handle
+/// [`handle`]: ElementHandler::handle
+/// [`priority`]: ElementHandler::priority
 pub trait ElementHandler: Send + Sync {
+    /// Determine if this handler can process the given element
+    ///
+    /// This method is called for each element during rendering to determine
+    /// which handlers should be applied. Return `true` if this handler
+    /// should process the element.
+    ///
+    /// # Arguments
+    ///
+    /// - `element` - The DOM element selection to check
+    ///
+    /// # Returns
+    ///
+    /// - `true` - This handler should process the element
+    /// - `false` - This handler should skip the element
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// fn can_handle(&self, element: &Selection) -> bool {
+    ///     element.nodes().iter().any(|node| {
+    ///         node.node_name()
+    ///             .map(|name| name.to_lowercase() == "input")
+    ///             .unwrap_or(false)
+    ///     })
+    /// }
+    /// ```
     fn can_handle(&self, element: &Selection) -> bool;
+    
+    /// Process the element with the given data value
+    ///
+    /// This method performs the actual element processing. It can modify
+    /// the element's attributes, content, or perform any other necessary operations.
+    ///
+    /// # Arguments
+    ///
+    /// - `element` - The DOM element selection to process
+    /// - `value` - The data value to use for processing
+    ///
+    /// # Returns
+    ///
+    /// - `Ok(())` - Processing completed successfully
+    /// - `Err(Error)` - Processing failed with an error
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// fn handle(&self, element: &Selection, value: &dyn RenderValue) -> Result<()> {
+    ///     if let Some(val) = value.get_property(&[]) {
+    ///         element.set_attr("value", &val);
+    ///     }
+    ///     Ok(())
+    /// }
+    /// ```
     fn handle(&self, element: &Selection, value: &dyn RenderValue) -> Result<()>;
     
     /// Get the priority of this handler (higher numbers execute first)
+    ///
+    /// When multiple handlers can process the same element, they are executed
+    /// in priority order (highest to lowest). This allows important handlers
+    /// to run first and less critical handlers to run later.
+    ///
+    /// # Default Implementation
+    ///
+    /// The default priority is `0` (normal priority).
+    ///
+    /// # Priority Guidelines
+    ///
+    /// - `> 10` - Critical handlers (security, validation)
+    /// - `1-10` - Important handlers (form processing, data binding)
+    /// - `0` - Normal handlers (default)
+    /// - `< 0` - Low priority handlers (logging, debugging)
     fn priority(&self) -> i32 {
         0
     }
     
     /// Whether this handler allows chaining to other handlers
+    ///
+    /// If this method returns `false`, no other handlers will be executed
+    /// for the element after this handler completes. Use this when your
+    /// handler provides complete processing and other handlers are not needed.
+    ///
+    /// # Default Implementation
+    ///
+    /// The default is `true` (allow chaining).
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// fn allows_chaining(&self) -> bool {
+    ///     false // This handler provides complete processing
+    /// }
+    /// ```
     fn allows_chaining(&self) -> bool {
         true
     }
 }
 
+/// Built-in handler for HTML input elements
+///
+/// This handler sets the `value` attribute on input elements based on the
+/// rendered data. It handles all input types (text, email, number, etc.)
+/// by converting the data value to a string and setting it as the value attribute.
+///
+/// # Processing Behavior
+///
+/// - Applies to: `<input>` elements
+/// - Action: Sets `value` attribute with the data value
+/// - Data conversion: Uses `RenderValue::get_property(&[])` 
+/// - Missing data: Leaves value attribute unchanged
+///
+/// # Examples
+///
+/// ```html
+/// <!-- Template -->
+/// <input type="text" name="username" itemprop="username" />
+///
+/// <!-- With data: {"username": "alice"} -->
+/// <input type="text" name="username" itemprop="username" value="alice" />
+/// ```
+///
+/// # Registration
+///
+/// This handler is automatically registered when using `with_default_handlers()`:
+///
+/// ```rust,ignore
+/// let template = HtmlTemplateBuilder::new()
+///     .from_str(html)
+///     .with_default_handlers() // Includes InputHandler
+///     .build()?;
+/// ```
 pub struct InputHandler;
 
 impl InputHandler {
+    /// Create a new InputHandler instance
     pub fn new() -> Self {
         Self
     }
@@ -45,9 +293,52 @@ impl ElementHandler for InputHandler {
     }
 }
 
+/// Built-in handler for HTML select elements
+///  
+/// This handler sets the `selected` attribute on option elements within select
+/// elements based on the rendered data. It finds option elements whose `value`
+/// attribute matches the data value and marks them as selected.
+///
+/// # Processing Behavior
+///
+/// - Applies to: `<select>` elements
+/// - Action: Sets `selected` attribute on matching `<option>` elements
+/// - Matching: Compares option `value` attribute with data value
+/// - Multiple selection: Handles both single and multiple select elements
+/// - Missing data: Uses empty string for comparison
+///
+/// # Examples
+///
+/// ```html
+/// <!-- Template -->
+/// <select name="country" itemprop="country">
+///     <option value="us">United States</option>
+///     <option value="uk">United Kingdom</option>
+///     <option value="ca">Canada</option>
+/// </select>
+///
+/// <!-- With data: {"country": "uk"} -->
+/// <select name="country" itemprop="country">
+///     <option value="us">United States</option>
+///     <option value="uk" selected>United Kingdom</option>
+///     <option value="ca">Canada</option>
+/// </select>
+/// ```
+///
+/// # Registration
+///
+/// This handler is automatically registered when using `with_default_handlers()`:
+///
+/// ```rust,ignore
+/// let template = HtmlTemplateBuilder::new()
+///     .from_str(html)
+///     .with_default_handlers() // Includes SelectHandler
+///     .build()?;
+/// ```
 pub struct SelectHandler;
 
 impl SelectHandler {
+    /// Create a new SelectHandler instance
     pub fn new() -> Self {
         Self
     }
@@ -80,9 +371,52 @@ impl ElementHandler for SelectHandler {
     }
 }
 
+/// Built-in handler for HTML textarea elements
+///
+/// This handler sets the text content of textarea elements based on the
+/// rendered data. It automatically escapes HTML entities to prevent XSS
+/// attacks and ensure proper display of special characters.
+///
+/// # Processing Behavior
+///
+/// - Applies to: `<textarea>` elements
+/// - Action: Sets text content with HTML entity escaping
+/// - HTML escaping: Converts `&`, `<`, `>`, `"`, and `'` to entities
+/// - Missing data: Leaves content unchanged
+///
+/// # Security
+///
+/// This handler automatically escapes HTML entities to prevent XSS vulnerabilities:
+/// - `&` → `&amp;`
+/// - `<` → `&lt;`
+/// - `>` → `&gt;`
+/// - `"` → `&quot;`
+/// - `'` → `&#39;`
+///
+/// # Examples
+///
+/// ```html
+/// <!-- Template -->
+/// <textarea name="description" itemprop="description"></textarea>
+///
+/// <!-- With data: {"description": "Text with <b>HTML</b> & symbols"} -->
+/// <textarea name="description" itemprop="description">Text with &lt;b&gt;HTML&lt;/b&gt; &amp; symbols</textarea>
+/// ```
+///
+/// # Registration
+///
+/// This handler is automatically registered when using `with_default_handlers()`:
+///
+/// ```rust,ignore
+/// let template = HtmlTemplateBuilder::new()
+///     .from_str(html)
+///     .with_default_handlers() // Includes TextareaHandler
+///     .build()?;
+/// ```
 pub struct TextareaHandler;
 
 impl TextareaHandler {
+    /// Create a new TextareaHandler instance
     pub fn new() -> Self {
         Self
     }
@@ -112,9 +446,52 @@ impl ElementHandler for TextareaHandler {
     }
 }
 
+/// Built-in handler for HTML meta elements
+///
+/// This handler sets the `content` attribute on meta elements based on the
+/// rendered data. This is commonly used for metadata, SEO tags, and social
+/// media sharing information.
+///
+/// # Processing Behavior
+///
+/// - Applies to: `<meta>` elements
+/// - Action: Sets `content` attribute with the data value
+/// - Data conversion: Uses `RenderValue::get_property(&[])`
+/// - Missing data: Leaves content attribute unchanged
+///
+/// # Examples
+///
+/// ```html
+/// <!-- Template -->
+/// <meta name="description" itemprop="description" />
+/// <meta property="og:title" itemprop="title" />
+///
+/// <!-- With data: {"description": "Page about HTML templates", "title": "HTML Template Guide"} -->
+/// <meta name="description" itemprop="description" content="Page about HTML templates" />
+/// <meta property="og:title" itemprop="title" content="HTML Template Guide" />
+/// ```
+///
+/// # Common Use Cases
+///
+/// - SEO meta tags (`description`, `keywords`)
+/// - Open Graph tags (`og:title`, `og:description`, `og:image`)
+/// - Twitter Card tags (`twitter:title`, `twitter:description`)
+/// - Schema.org structured data
+///
+/// # Registration
+///
+/// This handler is automatically registered when using `with_default_handlers()`:
+///
+/// ```rust,ignore
+/// let template = HtmlTemplateBuilder::new()
+///     .from_str(html)
+///     .with_default_handlers() // Includes MetaHandler
+///     .build()?;
+/// ```
 pub struct MetaHandler;
 
 impl MetaHandler {
+    /// Create a new MetaHandler instance
     pub fn new() -> Self {
         Self
     }
@@ -137,20 +514,84 @@ impl ElementHandler for MetaHandler {
     }
 }
 
-/// Handler registry that manages handlers with priorities and chaining
+/// Registry that manages element handlers with priorities and chaining
+///
+/// The `HandlerRegistry` provides centralized management of element handlers,
+/// supporting priority-based execution and handler chaining. Handlers are
+/// organized by HTML tag name and executed in priority order.
+///
+/// # Features
+///
+/// - **Priority-based execution**: Higher priority handlers execute first
+/// - **Handler chaining**: Multiple handlers can process the same element
+/// - **Tag-based organization**: Handlers are grouped by HTML tag name
+/// - **Thread-safe**: Can be used across multiple threads
+///
+/// # Usage
+///
+/// ```rust,ignore
+/// use html_template::{HandlerRegistry, InputHandler, LoggingHandler};
+///
+/// let mut registry = HandlerRegistry::new();
+/// 
+/// // Register built-in handlers
+/// registry.register("input", Box::new(InputHandler::new()));
+/// 
+/// // Register custom handlers with priority
+/// registry.register_with_priority("input", Box::new(LoggingHandler), 10);
+///
+/// // Use with template
+/// let template = HtmlTemplateBuilder::new()
+///     .from_str(html)
+///     .with_handler_registry(registry)
+///     .build()?;
+/// ```
+///
+/// # Priority Guidelines
+///
+/// - `> 10`: Critical handlers (security, validation)
+/// - `1-10`: Important handlers (form processing, data binding)  
+/// - `0`: Normal handlers (default priority)
+/// - `< 0`: Low priority handlers (logging, debugging)
+///
+/// # Handler Chaining
+///
+/// Multiple handlers can process the same element in priority order.
+/// Use `allows_chaining() = false` to stop processing after a handler.
 pub struct HandlerRegistry {
     handlers: BTreeMap<String, Vec<(i32, Box<dyn ElementHandler>)>>,
 }
 
 impl HandlerRegistry {
-    /// Create a new handler registry
+    /// Create a new empty handler registry
+    ///
+    /// Creates a registry with no registered handlers. Use [`register`] or
+    /// [`register_with_priority`] to add handlers, or use [`with_defaults`]
+    /// to get a registry with built-in handlers pre-registered.
+    ///
+    /// [`register`]: HandlerRegistry::register
+    /// [`register_with_priority`]: HandlerRegistry::register_with_priority
+    /// [`with_defaults`]: HandlerRegistry::with_defaults
     pub fn new() -> Self {
         Self {
             handlers: BTreeMap::new(),
         }
     }
     
-    /// Create a registry with default handlers
+    /// Create a registry with default handlers pre-registered
+    ///
+    /// This convenience method creates a registry with all built-in handlers:
+    /// - [`InputHandler`] for `<input>` elements
+    /// - [`SelectHandler`] for `<select>` elements  
+    /// - [`TextareaHandler`] for `<textarea>` elements
+    /// - [`MetaHandler`] for `<meta>` elements
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// let registry = HandlerRegistry::with_defaults();
+    /// // All built-in handlers are now registered
+    /// ```
     pub fn with_defaults() -> Self {
         let mut registry = Self::new();
         registry.register("input", Box::new(InputHandler::new()));
@@ -160,7 +601,26 @@ impl HandlerRegistry {
         registry
     }
     
-    /// Register a handler for a specific tag name
+    /// Register a handler for a specific HTML tag name
+    ///
+    /// The handler will be inserted in priority order based on its
+    /// [`priority`] method. Multiple handlers can be registered for
+    /// the same tag name.
+    ///
+    /// # Arguments
+    ///
+    /// - `tag_name` - HTML tag name (case-insensitive)
+    /// - `handler` - The handler to register
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// let mut registry = HandlerRegistry::new();
+    /// registry.register("button", Box::new(CustomButtonHandler));
+    /// registry.register("input", Box::new(InputHandler::new()));
+    /// ```
+    ///
+    /// [`priority`]: ElementHandler::priority
     pub fn register(&mut self, tag_name: &str, handler: Box<dyn ElementHandler>) {
         let priority = handler.priority();
         let tag_handlers = self.handlers.entry(tag_name.to_lowercase()).or_insert_with(Vec::new);
@@ -170,7 +630,29 @@ impl HandlerRegistry {
         tag_handlers.insert(insert_pos, (priority, handler));
     }
     
-    /// Register a handler with a specific priority
+    /// Register a handler with an explicit priority
+    ///
+    /// This method allows overriding the handler's default priority.
+    /// The handler will be executed according to the specified priority
+    /// rather than its [`priority`] method.
+    ///
+    /// # Arguments
+    ///
+    /// - `tag_name` - HTML tag name (case-insensitive)
+    /// - `handler` - The handler to register
+    /// - `priority` - Priority value (higher executes first)
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// let mut registry = HandlerRegistry::new();
+    /// // Register with high priority
+    /// registry.register_with_priority("input", Box::new(ValidationHandler), 15);
+    /// // Register with low priority  
+    /// registry.register_with_priority("input", Box::new(LoggingHandler), -1);
+    /// ```
+    ///
+    /// [`priority`]: ElementHandler::priority
     pub fn register_with_priority(&mut self, tag_name: &str, handler: Box<dyn ElementHandler>, priority: i32) {
         let tag_handlers = self.handlers.entry(tag_name.to_lowercase()).or_insert_with(Vec::new);
         

@@ -1,15 +1,206 @@
+//! Value trait and implementations for template rendering
+//!
+//! This module defines the [`RenderValue`] trait that allows various Rust types
+//! to be used as data for template rendering. The trait provides a unified interface
+//! for accessing properties, handling arrays, and extracting metadata from data.
+//!
+//! # The RenderValue Trait
+//!
+//! The [`RenderValue`] trait enables any Rust type to be used with html-template:
+//!
+//! ```rust,ignore
+//! use html_template::RenderValue;
+//! use std::borrow::Cow;
+//!
+//! struct MyData {
+//!     name: String,
+//!     count: i32,
+//! }
+//!
+//! impl RenderValue for MyData {
+//!     fn get_property(&self, path: &[String]) -> Option<Cow<str>> {
+//!         match path.get(0)?.as_str() {
+//!             "name" => Some(Cow::Borrowed(&self.name)),
+//!             "count" => Some(Cow::Owned(self.count.to_string())),
+//!             _ => None,
+//!         }
+//!     }
+//!     
+//!     fn is_array(&self) -> bool { false }
+//!     fn as_array(&self) -> Option<Vec<&dyn RenderValue>> { None }
+//!     fn get_type(&self) -> Option<&str> { None }
+//!     fn get_id(&self) -> Option<&str> { None }
+//! }
+//! ```
+//!
+//! # Built-in Implementations
+//!
+//! The crate provides implementations for common Rust types:
+//!
+//! - `serde_json::Value` - Full JSON support with nested objects and arrays
+//! - `String` and `&str` - Simple string values
+//! - Numeric types (`i32`, `u32`, `f64`, etc.) - Converted to strings
+//! - `Vec<T>` where `T: RenderValue` - Array support
+//! - `HashMap<String, T>` - Object-like structures
+//!
+//! # Derive Macro Support
+//!
+//! Use the `#[derive(Renderable)]` macro for automatic trait implementation:
+//!
+//! ```rust,ignore
+//! use html_template::Renderable;
+//!
+//! #[derive(Renderable)]
+//! struct Article {
+//!     title: String,
+//!     #[renderable(rename = "articleBody")]
+//!     content: String,
+//!     #[renderable(skip)]
+//!     internal_id: u64,
+//! }
+//! ```
+
 use std::borrow::Cow;
 use serde::Serialize;
 use serde_json::Value as JsonValue;
 
+/// Trait for types that can be rendered in HTML templates
+///
+/// This trait provides a unified interface for accessing data properties,
+/// handling arrays, and extracting metadata from various Rust types.
+/// Implementing this trait allows your types to be used with [`HtmlTemplate::render`].
+///
+/// # Required Methods
+///
+/// - [`get_property`] - Extract string values from the data using property paths
+/// - [`is_array`] - Determine if this value represents an array
+/// - [`as_array`] - Convert to array of RenderValue items if applicable
+/// - [`get_type`] - Get Schema.org type information for microdata
+/// - [`get_id`] - Get unique identifier for linking and references
+///
+/// [`get_property`]: RenderValue::get_property
+/// [`is_array`]: RenderValue::is_array
+/// [`as_array`]: RenderValue::as_array
+/// [`get_type`]: RenderValue::get_type
+/// [`get_id`]: RenderValue::get_id
+///
+/// # Property Paths
+///
+/// Property paths are arrays of strings representing nested access:
+/// - `["name"]` - Simple property access
+/// - `["user", "name"]` - Nested object access  
+/// - `["items", "0", "title"]` - Array element access
+///
+/// # Memory Efficiency
+///
+/// The [`get_property`] method returns `Cow<str>` to avoid unnecessary allocations.
+/// Return `Cow::Borrowed` for string slices and `Cow::Owned` for computed values.
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// use html_template::RenderValue;
+/// use std::borrow::Cow;
+///
+/// // Simple implementation
+/// impl RenderValue for String {
+///     fn get_property(&self, path: &[String]) -> Option<Cow<str>> {
+///         if path.is_empty() {
+///             Some(Cow::Borrowed(self))
+///         } else {
+///             None
+///         }
+///     }
+///     
+///     fn is_array(&self) -> bool { false }
+///     fn as_array(&self) -> Option<Vec<&dyn RenderValue>> { None }
+///     fn get_type(&self) -> Option<&str> { None }
+///     fn get_id(&self) -> Option<&str> { None }
+/// }
+/// ```
+///
+/// [`HtmlTemplate::render`]: crate::HtmlTemplate::render
+/// [`get_property`]: RenderValue::get_property
 pub trait RenderValue {
+    /// Get a property value as a string
+    ///
+    /// Extract string values from the data using a property path.
+    /// Return `None` if the property doesn't exist or cannot be converted to a string.
+    ///
+    /// # Arguments
+    ///
+    /// - `path` - Array of property names representing the access path
+    ///
+    /// # Returns
+    ///
+    /// - `Some(Cow<str>)` - The property value as a string
+    /// - `None` - Property doesn't exist or cannot be converted
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// use serde_json::json;
+    /// 
+    /// let data = json!({"user": {"name": "Alice", "age": 30}});
+    /// 
+    /// // Simple property
+    /// assert_eq!(data.get_property(&["user".to_string()]), None); // user is object
+    /// 
+    /// // Nested property  
+    /// let name = data.get_property(&["user".to_string(), "name".to_string()]);
+    /// assert_eq!(name, Some(Cow::Borrowed("Alice")));
+    /// ```
     fn get_property(&self, path: &[String]) -> Option<Cow<str>>;
+    
+    /// Check if this value represents an array
+    ///
+    /// Returns `true` if this value should be treated as an array for template rendering.
+    /// Array values will have their template elements cloned for each item.
     fn is_array(&self) -> bool;
+    
+    /// Convert to array of RenderValue items
+    ///  
+    /// If [`is_array`] returns `true`, this method should return the array items.
+    /// Each item will be used to render a cloned template element.
+    ///
+    /// [`is_array`]: RenderValue::is_array
     fn as_array(&self) -> Option<Vec<&dyn RenderValue>>;
+    
+    /// Get Schema.org type information
+    ///
+    /// Returns the Schema.org type URL for this data, used with `itemtype` attributes.
+    /// This enables semantic markup and validation against Schema.org vocabularies.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// // For an article data structure
+    /// fn get_type(&self) -> Option<&str> {
+    ///     Some("http://schema.org/Article")
+    /// }
+    /// ```
     fn get_type(&self) -> Option<&str>;
+    
+    /// Get unique identifier for this data
+    ///
+    /// Returns a unique identifier used with `itemid` attributes for linking
+    /// and cross-referencing data items.
     fn get_id(&self) -> Option<&str>;
     
     /// Get a nested value as a RenderValue (for arrays and objects)
+    ///
+    /// This method provides access to nested values that implement RenderValue.
+    /// The default implementation returns `None`, but implementations can override
+    /// to provide nested value access for complex data structures.
+    ///
+    /// # Arguments
+    ///
+    /// - `path` - Property path to the nested value
+    ///
+    /// # Returns
+    ///
+    /// - `Some(&dyn RenderValue)` - Reference to the nested value
+    /// - `None` - Path doesn't exist or doesn't yield a RenderValue
     fn get_value(&self, path: &[String]) -> Option<&dyn RenderValue> {
         // Default implementation returns None
         // Implementations can override to provide nested value access

@@ -1,3 +1,31 @@
+//! Core template types and configurations
+//!
+//! This module contains the main template structures, configuration options,
+//! and fundamental types used throughout the library.
+//!
+//! # Key Types
+//!
+//! - [`HtmlTemplate`] - The main template type for rendering HTML
+//! - [`TemplateConfig`] - Configuration options for template behavior
+//! - [`CacheMode`] - Cache strategies for improved performance
+//! - [`CompiledTemplate`] - Internal compiled template representation
+//!
+//! # Usage
+//!
+//! Most users will primarily interact with [`HtmlTemplate`] and [`TemplateConfig`]:
+//!
+//! ```rust,ignore
+//! use html_template::{HtmlTemplate, TemplateConfig, CacheMode};
+//! use serde_json::json;
+//!
+//! let config = TemplateConfig::default()
+//!     .with_cache_mode(CacheMode::Aggressive)
+//!     .with_zero_copy(true);
+//!
+//! let template = HtmlTemplate::from_str_with_config(html, Some("div"), config)?;
+//! let result = template.render(&data)?;
+//! ```
+
 use std::sync::Arc;
 use std::collections::HashMap;
 use dom_query::Document;
@@ -7,6 +35,67 @@ use crate::error::{Error, Result};
 use crate::value::RenderValue;
 use crate::cache::{TemplateCache, TemplateCacheKey, get_global_cache};
 
+/// Main template type for HTML rendering with microdata support
+///
+/// `HtmlTemplate` represents a compiled HTML template that can be rendered multiple times
+/// with different data. Templates use microdata attributes (`itemprop`, `itemscope`, `itemtype`)
+/// for data binding and support advanced features like array handling, nested objects,
+/// constraints, and custom element handlers.
+///
+/// # Creating Templates
+///
+/// Templates can be created from strings, files, or using the builder pattern:
+///
+/// ```rust,ignore
+/// use html_template::{HtmlTemplate, HtmlTemplateBuilder};
+/// use serde_json::json;
+///
+/// // From string
+/// let template = HtmlTemplate::from_str(html, Some("div"))?;
+///
+/// // From file  
+/// let template = HtmlTemplate::from_file("template.html")?;
+///
+/// // Using builder
+/// let template = HtmlTemplateBuilder::new()
+///     .from_str(html)
+///     .with_selector("article")
+///     .with_default_handlers()
+///     .build()?;
+/// ```
+///
+/// # Rendering Data
+///
+/// Templates can render any type implementing [`RenderValue`]:
+///
+/// ```rust,ignore
+/// use serde_json::json;
+///
+/// let data = json!({
+///     "title": "Hello World",
+///     "items": [{"name": "Item 1"}, {"name": "Item 2"}]
+/// });
+///
+/// let result = template.render(&data)?;
+/// ```
+///
+/// # Thread Safety
+///
+/// `HtmlTemplate` is thread-safe and can be shared across threads. The internal
+/// compiled template is reference-counted, making cloning cheap.
+///
+/// # Performance
+///
+/// Templates are compiled once and can be rendered multiple times efficiently.
+/// Enable caching and zero-copy optimizations for better performance:
+///
+/// ```rust,ignore
+/// let config = TemplateConfig::default()
+///     .with_cache_mode(CacheMode::Aggressive)
+///     .with_zero_copy(true);
+///
+/// let template = HtmlTemplate::from_str_with_config(html, None, config)?;
+/// ```
 pub struct HtmlTemplate {
     pub(crate) compiled: Arc<CompiledTemplate>,
     pub(crate) config: TemplateConfig,
