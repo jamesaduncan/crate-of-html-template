@@ -36,6 +36,9 @@ pub mod error;
 pub mod types;
 pub mod value;
 pub mod handlers;
+pub mod parser;
+pub mod node_ext;
+pub mod compiler;
 
 // Re-export commonly used types
 pub use error::{Error, Result};
