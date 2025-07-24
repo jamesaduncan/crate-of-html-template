@@ -312,6 +312,14 @@ pub trait ElementHandler: Send + Sync {
   - [ ] Implement cache eviction
   - [ ] Write cache effectiveness tests
 
+- [ ] **5.4 Advanced Cross-Document Features**
+  - [ ] Support async document fetching (deferred from Phase 4.2)
+  - [ ] Implement proper URI resolution (deferred from Phase 4.2)
+  - [ ] Add HTTP client integration for remote templates
+  - [ ] Implement document caching for remote resources
+  - [ ] Add retry logic and error handling for network requests
+  - [ ] Write tests for async document operations
+
 ### Phase 6: API Surface
 
 - [ ] **6.1 Builder Pattern**
@@ -332,7 +340,15 @@ pub trait ElementHandler: Send + Sync {
   - [ ] Ensure API compatibility
   - [ ] Write tests for each constructor
 
-- [ ] **6.3 Public API**
+- [ ] **6.3 Advanced Derive Macro Features**
+  - [ ] Handle nested structs in derive macro (requires trait bounds)
+  - [ ] Support generic types in derive macro (requires trait bounds)
+  - [ ] Implement automatic nested property access
+  - [ ] Add support for complex nested rendering
+  - [ ] Write tests for nested struct scenarios
+  - [ ] Write tests for generic type scenarios
+
+- [ ] **6.4 Public API**
   - [ ] Design clean public API in `src/lib.rs`
   - [ ] Export necessary types
   - [ ] Hide implementation details
@@ -421,10 +437,11 @@ The recommended order for implementation:
 1. **Week 1**: Complete Phase 1 (Project Setup)
 2. **Week 2**: Complete Phase 2 (Parsing Engine)
 3. **Week 3**: Complete Phase 3 (Basic Rendering)
-4. **Week 4**: Complete Phase 4 items 4.1-4.2 (Constraints & Cross-doc)
-5. **Week 5**: Complete Phase 4 item 4.3 and Phase 5 (Macros & Performance)
-6. **Week 6**: Complete Phases 6-7 (API & Handlers)
-7. **Week 7**: Complete Phase 8 (Testing & Documentation)
+4. **Week 4**: Complete Phase 4 items 4.1-4.3 (Constraints, Cross-doc, Macros)
+5. **Week 5**: Complete Phase 5 (Performance Optimizations including deferred async features)
+6. **Week 6**: Complete Phase 6 (API Surface including advanced derive features)
+7. **Week 7**: Complete Phase 7 (Element Handlers)
+8. **Week 8**: Complete Phase 8 (Testing & Documentation)
 
 ## Progress Tracking
 
@@ -445,7 +462,7 @@ Current Status:
 - Array detection for structs containing Vec fields
 - Integration with template rendering system
 - Comprehensive test suite and working example
-- Note: Nested structs and generics deferred (require trait bounds)
+- Note: Nested structs and generics deferred to Phase 6.3 (require trait bounds)
 
 ### Implementation Notes from Phase 4.2 (Complete):
 - Cross-document rendering implemented with microdata extraction
@@ -454,6 +471,7 @@ Current Status:
 - Handles @type and @id attributes from itemtype and itemid
 - Special element value extraction (meta[content], time[datetime], link[href], etc.)
 - Comprehensive integration tests for cross-document scenarios
+- Note: Async document fetching and URI resolution deferred to Phase 5.4
 - Note: Array content population has known issue (tracked separately)
 
 ### Implementation Notes from Phase 4.1:
