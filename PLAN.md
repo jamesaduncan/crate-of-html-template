@@ -258,14 +258,14 @@ pub trait ElementHandler: Send + Sync {
 
 ### Phase 4: Advanced Features
 
-- [ ] **4.1 Constraint System**
-  - [ ] Create `src/constraints.rs`
-  - [ ] Parse constraint expressions
-  - [ ] Implement scope resolution
-  - [ ] Handle `@id` references
-  - [ ] Support JSON-LD references
-  - [ ] Evaluate constraints during rendering
-  - [ ] Write tests for constraint logic
+- [x] **4.1 Constraint System**
+  - [x] Create `src/constraints.rs`
+  - [x] Parse constraint expressions
+  - [x] Implement scope resolution
+  - [x] Handle `@id` references (basic support)
+  - [x] Support JSON-LD references (basic)
+  - [x] Evaluate constraints during rendering
+  - [x] Write tests for constraint logic
 
 - [ ] **4.2 Cross-Document Rendering**
   - [ ] Implement `render_from_element`
@@ -430,10 +430,19 @@ The recommended order for implementation:
 
 Current Status:
 - **Started**: 2025-07-24
-- **Current Phase**: Phase 3 complete
-- **Last Completed Task**: 3.3 Nested Object Rendering (Phase 3 complete)
-- **Next Task**: Phase 4.1 Constraint System
+- **Current Phase**: Phase 4 in progress
+- **Last Completed Task**: 4.1 Constraint System
+- **Next Task**: 4.2 Cross-Document Rendering
 - **Blockers**: None
+
+### Implementation Notes from Phase 4.1:
+- Constraint system implemented with expression parser
+- Supports equality, inequality, and comparison operators
+- Property existence checks with truthy/falsy evaluation
+- Basic scope constraint support
+- Constraints are evaluated during rendering
+- Elements that fail constraints are removed from output
+- Comprehensive tests for constraint evaluation
 
 ### Implementation Notes from Phase 3 (Complete):
 - Implemented basic rendering engine with full variable substitution

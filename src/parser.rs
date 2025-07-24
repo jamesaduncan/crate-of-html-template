@@ -320,6 +320,16 @@ impl Parser {
             selector_parts.push(format!("[itemprop=\"{}\"]", itemprop));
         }
         
+        // Add data-constraint as attribute selector
+        if let Some(constraint) = element.attr("data-constraint") {
+            selector_parts.push(format!("[data-constraint=\"{}\"]", constraint.replace('"', "\\\"")));
+        }
+        
+        // Add data-scope as attribute selector
+        if let Some(scope) = element.attr("data-scope") {
+            selector_parts.push(format!("[data-scope=\"{}\"]", scope));
+        }
+        
         Ok(selector_parts.join(""))
     }
 

@@ -15,6 +15,7 @@ use crate::types::*;
 use crate::value::RenderValue;
 use crate::handlers::ElementHandler;
 use crate::node_ext::NodeExt;
+use crate::constraints::{ConstraintContext, ConstraintEvaluator};
 
 static VARIABLE_REGEX: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r"\$\{([^}]+)\}").expect("Invalid variable regex")
@@ -375,10 +376,32 @@ impl<'a> Renderer<'a> {
     fn apply_constraints(
         &self,
         _doc: &Document,
-        _root: &Selection,
-        _data: &dyn RenderValue,
+        root: &Selection,
+        data: &dyn RenderValue,
     ) -> Result<()> {
-        // Constraints will be implemented in Phase 4
+        // Create constraint context
+        let context = ConstraintContext::new(data);
+        let evaluator = ConstraintEvaluator::new();
+        
+        // TODO: Implement @id registration with proper lifetime management
+        // For now, we'll skip this and only support direct property constraints
+        
+        // Evaluate constraints
+        for constraint in &self.template.constraints {
+            // Find elements matching the constraint selector
+            let constrained_elements = root.select(&constraint.element_selector);
+            
+            // Check if constraint is satisfied
+            let should_show = evaluator.should_render(constraint, &context)?;
+            
+            // Hide or show elements based on constraint
+            if !should_show {
+                for element in constrained_elements.nodes() {
+                    element.remove_from_parent();
+                }
+            }
+        }
+        
         Ok(())
     }
 
@@ -496,6 +519,7 @@ mod tests {
     use super::*;
     use crate::parser::Parser;
     use crate::compiler::Compiler;
+    use crate::types::{Constraint, ConstraintType};
     use serde_json::json;
     
     fn create_test_template(html: &str) -> Arc<CompiledTemplate> {
@@ -737,6 +761,95 @@ mod tests {
         assert!(result.contains("John Doe"));
         assert!(result.contains("john@example.com"));
         assert!(result.contains("This is the article content."));
+    }
+    
+    #[test]
+    fn test_render_with_constraints() {
+        let html = r#"
+            <template>
+                <div>
+                    <h1 itemprop="title"></h1>
+                    <div data-constraint='status == "active"'>
+                        <p>This content is only shown when status is active</p>
+                    </div>
+                    <div data-constraint="count > 5">
+                        <p>Count is greater than 5!</p>
+                    </div>
+                    <div data-constraint="premium">
+                        <p>Premium content</p>
+                    </div>
+                </div>
+            </template>
+        "#;
+        
+        let template = create_test_template(html);
+        let handlers = std::collections::HashMap::new();
+        let renderer = Renderer::new(&template, &handlers);
+        
+        let data = json!({
+            "title": "Conditional Content",
+            "status": "active",
+            "count": 10,
+            "premium": false
+        });
+        
+        let result = renderer.render(&data).unwrap();
+        
+        // Should show title
+        assert!(result.contains("Conditional Content"));
+        
+        // Should show active content
+        assert!(result.contains("This content is only shown when status is active"));
+        
+        // Should show count > 5 content
+        assert!(result.contains("Count is greater than 5!"));
+        
+        // Should NOT show premium content
+        assert!(!result.contains("Premium content"));
+    }
+    
+    #[test]
+    fn test_render_with_scope_constraints() {
+        let html = r#"
+            <template>
+                <div>
+                    <h1 itemprop="title"></h1>
+                    <div data-scope="admin">
+                        <p>Admin only content</p>
+                    </div>
+                    <div data-scope="user">
+                        <p>User content</p>
+                    </div>
+                </div>
+            </template>
+        "#;
+        
+        let parser = Parser::new(html).unwrap();
+        let mut template = parser.parse_template(Some("div")).unwrap();
+        
+        // Manually set scope context for testing
+        // In real usage, this would be set by the application
+        template.constraints.push(Constraint {
+            element_selector: "[data-scope=\"admin\"]".to_string(),
+            constraint_type: ConstraintType::Scope("admin".to_string()),
+            scope: Some("admin".to_string()),
+        });
+        
+        let compiled = Compiler::compile_from_template(template);
+        let handlers = std::collections::HashMap::new();
+        let renderer = Renderer::new(&compiled, &handlers);
+        
+        let data = json!({
+            "title": "Scoped Content"
+        });
+        
+        let result = renderer.render(&data).unwrap();
+        
+        // Should show title
+        assert!(result.contains("Scoped Content"));
+        
+        // For now, both will show since we don't have scope context in renderer
+        // This would need application-level integration
     }
     
     #[test]

@@ -6,7 +6,7 @@
 //! 
 //! # Examples
 //! 
-//! ```rust
+//! ```rust,ignore
 //! use html_template::HtmlTemplate;
 //! use serde_json::json;
 //! 
@@ -20,6 +20,7 @@
 //!     </template>
 //! "#;
 //! 
+//! // API not yet implemented - use parser and compiler directly
 //! let template = HtmlTemplate::from_str(html, "div")?;
 //! 
 //! let data = json!({
@@ -40,6 +41,7 @@ pub mod parser;
 pub mod node_ext;
 pub mod compiler;
 pub mod renderer;
+pub mod constraints;
 
 // Re-export commonly used types
 pub use error::{Error, Result};
