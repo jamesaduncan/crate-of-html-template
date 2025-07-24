@@ -43,12 +43,14 @@ pub mod compiler;
 pub mod renderer;
 pub mod constraints;
 pub mod microdata;
+pub mod streaming;
 
 // Re-export commonly used types
 pub use error::{Error, Result};
 pub use types::{HtmlTemplate, TemplateConfig, CacheMode};
 pub use value::RenderValue;
 pub use handlers::ElementHandler;
+pub use streaming::{StreamingRenderer, StreamingResult, OwnedStreamingResult};
 
 // Re-export derive macro when implemented
 #[cfg(feature = "derive")]
