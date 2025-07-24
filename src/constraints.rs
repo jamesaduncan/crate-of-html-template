@@ -64,6 +64,16 @@ impl<'a> ConstraintContext<'a> {
             return self.check_property_exists(property).map(|exists| !exists);
         }
 
+        // Check for logical OR first (lowest precedence)
+        if let Some((left, right)) = expr.split_once("||") {
+            return self.evaluate_logical_or(left.trim(), right.trim());
+        }
+
+        // Check for logical AND (higher precedence than ||)
+        if let Some((left, right)) = expr.split_once("&&") {
+            return self.evaluate_logical_and(left.trim(), right.trim());
+        }
+
         // Check for existence operator (just a property name)
         if !expr.contains(['=', '!', '<', '>', ' ']) {
             return self.check_property_exists(expr);
@@ -97,16 +107,6 @@ impl<'a> ConstraintContext<'a> {
         // Check for less than
         if let Some((left, right)) = expr.split_once('<') {
             return self.evaluate_less_than(left.trim(), right.trim());
-        }
-
-        // Check for logical AND
-        if let Some((left, right)) = expr.split_once("&&") {
-            return self.evaluate_logical_and(left.trim(), right.trim());
-        }
-
-        // Check for logical OR
-        if let Some((left, right)) = expr.split_once("||") {
-            return self.evaluate_logical_or(left.trim(), right.trim());
         }
 
         Err(Error::parse_owned(format!(

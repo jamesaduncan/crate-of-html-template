@@ -10,6 +10,9 @@ use crate::utils::split_path_cow;
 static VARIABLE_REGEX: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"\$\{([^}]+)\}").expect("Invalid variable regex"));
 
+static ESCAPED_VARIABLE_REGEX: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"\$\$\{([^}]+)\}").expect("Invalid escaped variable regex"));
+
 pub struct Parser {
     document: Document,
 }
@@ -176,8 +179,10 @@ impl Parser {
                 target: PropertyTarget::TextContent,
                 variables: if text_variables.is_empty() {
                     // Create an implicit variable binding
+                    // For itemprop names, treat the entire name as a single property
+                    // (don't split on dots like we do for ${var.path} variables)
                     vec![Variable {
-                        path: split_path_cow(prop_name).into_owned(),
+                        path: vec![prop_name.to_string()],
                         raw: format!("${{{}}}", prop_name),
                     }]
                 } else {
@@ -240,8 +245,18 @@ impl Parser {
     }
 
     fn extract_variables(&self, text: &str) -> Vec<Variable> {
+        // First, temporarily replace escaped variables with placeholders to avoid false matches
+        let mut working_text = text.to_string();
+        let escaped_vars: Vec<_> = ESCAPED_VARIABLE_REGEX.captures_iter(text).collect();
+        
+        for (i, cap) in escaped_vars.iter().enumerate() {
+            let placeholder = format!("__ESCAPED_VAR_{}__", i);
+            working_text = working_text.replace(&cap[0], &placeholder);
+        }
+        
+        // Now extract regular variables from the text with escaped vars replaced
         VARIABLE_REGEX
-            .captures_iter(text)
+            .captures_iter(&working_text)
             .map(|cap| {
                 let var_path = &cap[1];
                 let path = self.parse_variable_path(var_path);

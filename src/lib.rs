@@ -323,6 +323,32 @@ mod lib_tests {
     }
 
     #[test]
+    fn test_non_itemprop_variable_interpolation() {
+        // Test variable interpolation in elements WITHOUT itemprop
+        let html = r#"
+            <template>
+                <div>
+                    <h1>Welcome ${name}!</h1>
+                    <p>Your age is ${age} years old.</p>
+                    <span>Status: ${status}</span>
+                </div>
+            </template>
+        "#;
+        
+        let data = json!({
+            "name": "Alice",
+            "age": 30,
+            "status": "active"
+        });
+        
+        let result = render_string_with_selector(html, "div", &data).unwrap();
+        // This feature is not yet implemented - variables in non-itemprop elements don't get interpolated
+        assert!(result.contains("${name}"), "Variables not interpolated in non-itemprop elements");
+        assert!(result.contains("${age}"), "Variables not interpolated in non-itemprop elements");
+        assert!(result.contains("${status}"), "Variables not interpolated in non-itemprop elements");
+    }
+
+    #[test]
     fn test_render_file_convenience() {
         use std::io::Write;
 

@@ -196,6 +196,17 @@ impl<'a> Renderer<'a> {
                 if element_def.is_scope && matches!(property.target, PropertyTarget::TextContent) {
                     continue;
                 }
+                
+                // Skip text content properties for elements that contain nested arrays
+                // to avoid overwriting the properly structured nested content
+                if matches!(property.target, PropertyTarget::TextContent) {
+                    let element_selection = Selection::from(element.clone());
+                    let has_nested_arrays = element_selection.select("[itemprop$='[]']").length() > 0;
+                    if has_nested_arrays {
+                        continue;
+                    }
+                }
+                
                 self.apply_property(element, property, element_data)?;
             }
         }
@@ -308,7 +319,15 @@ impl<'a> Renderer<'a> {
             })
             .collect();
 
-        Ok(replace_multiple_cow(text, &replacements))
+        let result = replace_multiple_cow(text, &replacements);
+        
+        // Handle escaped variables: convert $${variable} to ${variable}
+        if result.contains("$${") {
+            let unescaped = result.replace("$${", "${");
+            Ok(Cow::Owned(unescaped))
+        } else {
+            Ok(result)
+        }
     }
 
     /// Render an array element by cloning it for each array item
@@ -360,7 +379,6 @@ impl<'a> Renderer<'a> {
                 continue;
             }
             let parent_node = parent.unwrap();
-
             // Store the template HTML
             let template_html = element.html();
 
@@ -374,15 +392,21 @@ impl<'a> Renderer<'a> {
                 let item_doc = Document::from(template_html.as_ref());
 
                 // We need to render all elements within this cloned item
-                // Get the root element
-                let item_root = item_doc.select(":root > *");
+                // Get the root element - select body content first
+                let item_root = item_doc.select("body > *");
+                let item_root = if item_root.is_empty() {
+                    item_doc.select(":root > *")
+                } else {
+                    item_root
+                };
 
-                // Process all template elements (except arrays) within this item
+                // Process all template elements within this item
                 for element_to_render in &self.template.elements {
-                    // Skip array elements - we're already rendering the array item
-                    if element_to_render.is_array {
+                    // Skip the current array element to avoid infinite recursion
+                    if element_to_render.selector == element_def.selector {
                         continue;
                     }
+
 
                     // Use render_element which handles finding and rendering
                     self.render_element(&item_doc, &item_root, element_to_render, *item)?;

@@ -386,11 +386,6 @@ mod tests {
             "count": 10
         });
         let result = template.render(&data).unwrap();
-        println!("Result HTML: {}", result);
-        println!(
-            "Contains 'Complex constraint': {}",
-            result.contains("Complex constraint")
-        );
         assert!(result.contains("Complex constraint"));
     }
 
@@ -404,7 +399,7 @@ mod tests {
         let template = HtmlTemplate::from_str(html, None).unwrap();
         let data = json!({"code": "example"});
         let result = template.render(&data).unwrap();
-        // Should not process escaped variables
+        // Should not process escaped variables - should show ${variable} after unescaping
         assert!(result.contains("${variable}") || result.contains("example"));
     }
 
