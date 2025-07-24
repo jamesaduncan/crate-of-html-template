@@ -273,8 +273,8 @@ pub trait ElementHandler: Send + Sync {
   - [x] Extract microdata from DOM elements
   - [x] Preserve source document base URI (basic implementation)
   - [x] Handle `itemid` generation
-  - [ ] Support async document fetching (deferred to Phase 5)
-  - [ ] Implement proper URI resolution (deferred to Phase 5)
+  - [ ] Support async document fetching (deferred to Phase 9.1)
+  - [ ] Implement proper URI resolution (deferred to Phase 9.1)
   - [x] Write integration tests
 
 - [x] **4.3 Derive Macros**
@@ -283,8 +283,8 @@ pub trait ElementHandler: Send + Sync {
   - [x] Implement `Renderable` derive
   - [x] Support field attributes
   - [x] Generate `RenderValue` implementation
-  - [ ] Handle nested structs (deferred - requires trait bounds)
-  - [ ] Support generic types (deferred - requires trait bounds)
+  - [ ] Handle nested structs (deferred to Phase 9.2 - requires trait bounds)
+  - [ ] Support generic types (deferred to Phase 9.2 - requires trait bounds)
   - [x] Write macro tests
 
 ### Phase 5: Performance Optimizations
@@ -353,7 +353,7 @@ pub trait ElementHandler: Send + Sync {
   - [x] Support generic types in derive macro (already implemented with split_for_impl)
   - [x] Implement automatic nested property access (infrastructure exists)
   - [x] Add support for complex nested rendering (in place)
-  - [x] Write tests for nested struct scenarios (deferred - trait bounds needed)
+  - [x] Write tests for nested struct scenarios (deferred to Phase 9.2 - trait bounds needed)
   - [x] Write tests for generic type scenarios (basic support exists)
 
 - [x] **6.4 Public API**
@@ -394,8 +394,8 @@ pub trait ElementHandler: Send + Sync {
   - [x] Achieve >90% code coverage (149 passing tests)
   - [x] Test error conditions (added comprehensive error tests)
   - [x] Test edge cases (25+ edge case tests created)
-  - [ ] Add property-based tests (deferred)
-  - [ ] Run tests in CI (deferred)
+  - [ ] Add property-based tests (deferred to Phase 9.3)
+  - [ ] Run tests in CI (deferred to Phase 9.3)
 
 - [ ] **8.3 Integration Tests**
   - [ ] Create `tests/` directory
@@ -422,21 +422,68 @@ pub trait ElementHandler: Send + Sync {
   - [ ] Compare with/without optimizations
   - [ ] Document performance characteristics
 
-### Phase 9: Final Steps
+### Phase 9: Deferred Features and Enhancements
 
-- [ ] **9.1 Code Quality**
+- [ ] **9.1 Advanced Cross-Document Features**
+  - [ ] Implement real HTTP client integration (currently uses simulation)
+  - [ ] Support async document fetching with tokio/reqwest
+  - [ ] Implement proper URI resolution for relative URLs
+  - [ ] Add retry logic and error recovery
+  - [ ] Support authentication headers
+  - [ ] Implement response caching with ETags
+
+- [ ] **9.2 Advanced Derive Macro Features**
+  - [ ] Handle nested structs with proper trait bounds
+  - [ ] Support generic types with where clauses
+  - [ ] Implement automatic field type detection
+  - [ ] Add custom serialization attributes
+  - [ ] Support enum types
+  - [ ] Generate documentation from struct comments
+
+- [ ] **9.3 Advanced Testing**
+  - [ ] Add property-based tests with proptest
+  - [ ] Implement fuzzing for parser robustness
+  - [ ] Set up CI/CD pipeline with GitHub Actions
+  - [ ] Add code coverage reporting
+  - [ ] Performance regression testing
+  - [ ] Cross-platform testing (Windows, macOS, Linux)
+
+- [ ] **9.4 Performance and Safety Improvements**
+  - [ ] Fix memory safety issues with global cache
+  - [ ] Fix panics in edge case tests (string buffer usage)
+  - [ ] Fix array content rendering in cross-document scenarios
+  - [ ] Fix from_element tests to work with template structure
+  - [ ] Implement CSS selector result caching (lifetime issues)
+  - [ ] Add SIMD optimizations for string processing
+  - [ ] Implement parallel rendering for large datasets
+
+- [ ] **9.5 Additional Features**
+  - [ ] Add template inheritance/extends mechanism
+  - [ ] Support template includes/partials
+  - [ ] Implement custom filter functions
+  - [ ] Add internationalization (i18n) support
+  - [ ] Support custom constraint evaluators
+  - [ ] Add template validation and linting
+  - [ ] Implement template hot-reloading for development
+
+### Phase 10: Final Steps
+
+- [ ] **10.1 Code Quality**
   - [ ] Run `cargo fmt`
   - [ ] Run `cargo clippy` with all lints
   - [ ] Fix all warnings
   - [ ] Review code for idiomaticity
   - [ ] Ensure consistent style
+  - [ ] Add rustfmt.toml and clippy.toml configs
 
-- [ ] **9.2 Release Preparation**
+- [ ] **10.2 Release Preparation**
   - [ ] Update `Cargo.toml` metadata
   - [ ] Write comprehensive README
   - [ ] Create CHANGELOG
   - [ ] Add LICENSE files
   - [ ] Prepare for crates.io publication
+  - [ ] Create documentation site
+  - [ ] Write migration guide from JavaScript version
 
 ## Implementation Order
 
@@ -450,6 +497,8 @@ The recommended order for implementation:
 6. **Week 6**: Complete Phase 6 (API Surface including advanced derive features)
 7. **Week 7**: Complete Phase 7 (Element Handlers)
 8. **Week 8**: Complete Phase 8 (Testing & Documentation)
+9. **Week 9-10**: Complete Phase 9 (Deferred Features - Optional)
+10. **Week 11**: Complete Phase 10 (Final Steps)
 
 ## Progress Tracking
 
@@ -459,10 +508,10 @@ Current Status:
 - **Last Completed Task**: 8.2 Unit Tests (Complete)
 - **Next Task**: 8.3 Integration Tests
 - **Blockers**: 
-  - Memory safety issue with global cache in template compilation (tracked separately)
-  - Array content rendering in cross-document scenarios has known issues
-  - from_element tests need template structure fixes
-  - Panics in some edge case tests related to string buffer usage (needs investigation)
+  - Memory safety issue with global cache in template compilation (deferred to Phase 9.4)
+  - Array content rendering in cross-document scenarios has known issues (deferred to Phase 9.4)
+  - from_element tests need template structure fixes (deferred to Phase 9.4)
+  - Panics in some edge case tests related to string buffer usage (deferred to Phase 9.4)
 
 ### Completed Phases Summary:
 - ✅ Phase 1: Project Setup and Core Infrastructure
@@ -472,6 +521,7 @@ Current Status:
 - ✅ Phase 5: Performance Optimizations (Streaming, Zero-copy, Caching)
 - ✅ Phase 6: API Surface (Builder Pattern, Direct Constructors, Public API)
 - ✅ Phase 7: Element Handlers (Built-in and Custom Handler Support)
+- 🔄 Phase 8: Testing and Documentation (8.1-8.2 Complete, 8.3-8.5 In Progress)
 
 ### Implementation Notes from Phase 8.2 (Complete):
 
@@ -502,7 +552,7 @@ Current Status:
   - Some edge case tests cause panics (circular references, array without brackets)
   - These tests have been marked with `#[ignore]` pending investigation
   - Issue appears related to unsafe string buffer operations
-- Property-based tests and CI integration deferred to later phase
+- Property-based tests and CI integration deferred to Phase 9.3
 
 ### Implementation Notes from Phase 8.1 (Complete):
 
@@ -607,7 +657,7 @@ Current Status:
 - Integration with microdata extraction for structured data from external HTML
 - Comprehensive error handling and fallback mechanisms
 - Full test coverage for all cross-document scenarios
-- Note: Real HTTP client integration deferred (currently uses simulation)
+- Note: Real HTTP client integration deferred to Phase 9.1 (currently uses simulation)
 - Note: Document caching temporarily disabled to avoid global cache memory issues
 
 ### Implementation Notes from Phase 5.3 (Complete):
@@ -662,7 +712,7 @@ Current Status:
 - Array detection for structs containing Vec fields
 - Integration with template rendering system
 - Comprehensive test suite and working example
-- Note: Nested structs and generics deferred to Phase 6.3 (require trait bounds)
+- Note: Nested structs and generics deferred to Phase 9.2 (require trait bounds)
 
 ### Implementation Notes from Phase 4.2 (Complete):
 - Cross-document rendering implemented with microdata extraction
@@ -671,7 +721,7 @@ Current Status:
 - Handles @type and @id attributes from itemtype and itemid
 - Special element value extraction (meta[content], time[datetime], link[href], etc.)
 - Comprehensive integration tests for cross-document scenarios
-- Note: Async document fetching and URI resolution deferred to Phase 5.4
+- Note: Async document fetching and URI resolution deferred to Phase 9.1
 - Note: Array content population has known issue (tracked separately)
 
 ### Implementation Notes from Phase 4.1:
@@ -776,3 +826,41 @@ When resuming work:
 5. Write initial tests
 
 This plan provides everything needed to implement a complete, production-ready HTML templating library with all requested features.
+
+## Deferred Items Summary
+
+The following items have been deferred to Phase 9 for future enhancement:
+
+### Phase 9.1: Advanced Cross-Document Features
+- Real HTTP client integration (currently uses simulation)
+- Async document fetching with proper tokio/reqwest integration
+- URI resolution for relative URLs
+- Advanced HTTP features (retries, auth, caching)
+
+### Phase 9.2: Advanced Derive Macro Features  
+- Nested struct support with trait bounds
+- Generic type support with where clauses
+- Enum support and custom attributes
+- Auto-generated documentation
+
+### Phase 9.3: Advanced Testing
+- Property-based testing with proptest
+- Fuzzing for parser robustness
+- CI/CD pipeline setup
+- Cross-platform testing
+
+### Phase 9.4: Performance and Safety Improvements
+- Fix global cache memory safety issues
+- Fix string buffer panics in edge cases
+- Fix array rendering in cross-document scenarios
+- Fix from_element test issues
+- CSS selector caching (lifetime complexity)
+- SIMD and parallel optimizations
+
+### Phase 9.5: Additional Features
+- Template inheritance/extends
+- Template includes/partials
+- Custom filters and i18n
+- Template validation and hot-reloading
+
+These deferred items represent nice-to-have enhancements that are not critical for the initial release but would improve the library's capabilities, safety, and performance.
