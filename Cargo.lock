@@ -555,8 +555,10 @@ dependencies = [
 name = "html-template-macros"
 version = "0.1.0"
 dependencies = [
+ "html-template",
  "proc-macro2",
  "quote",
+ "serde_json",
  "syn",
 ]
 
