@@ -1,4 +1,5 @@
 use std::collections::BTreeMap;
+use std::borrow::Cow;
 use dom_query::Selection;
 
 use crate::error::Result;
@@ -62,15 +63,17 @@ impl ElementHandler for SelectHandler {
     }
     
     fn handle(&self, element: &Selection, value: &dyn RenderValue) -> Result<()> {
-        if let Some(val) = value.get_property(&[]) {
-            // Find all option elements
-            let options = element.select("option");
-            for option in options.nodes() {
-                if option.attr("value").as_deref() == Some(val.as_ref()) {
-                    option.set_attr("selected", "selected");
-                } else {
-                    option.remove_attr("selected");
-                }
+        // Get the string value
+        let val_cow = value.get_property(&[]).unwrap_or(Cow::Borrowed(""));
+        let val = val_cow.as_ref();
+        
+        // Find all option elements
+        let options = element.select("option");
+        for option in options.nodes() {
+            if option.attr("value").as_deref() == Some(val) {
+                option.set_attr("selected", "selected");
+            } else {
+                option.remove_attr("selected");
             }
         }
         Ok(())

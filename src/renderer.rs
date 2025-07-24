@@ -16,7 +16,7 @@ use crate::value::RenderValue;
 use crate::handlers::ElementHandler;
 use crate::node_ext::NodeExt;
 use crate::constraints::{ConstraintContext, ConstraintEvaluator};
-use crate::utils::{replace_multiple_cow, split_path_cow, with_string_buffer};
+use crate::utils::{replace_multiple_cow, split_path_cow};
 use crate::cache::get_global_cache;
 
 static VARIABLE_REGEX: Lazy<Regex> = Lazy::new(|| {
@@ -168,21 +168,43 @@ impl<'a> Renderer<'a> {
             data
         };
 
+        // Check if there's a handler that should handle this element exclusively
+        let tag_name = element.node_name();
+        let skip_property_application = if let Some(tag) = &tag_name {
+            // For select elements, skip text content property application as the handler will manage it
+            tag.to_lowercase() == "select" && element_def.properties.iter().any(|p| matches!(p.target, PropertyTarget::TextContent))
+        } else {
+            false
+        };
+
         // Apply properties to the element
-        for property in &element_def.properties {
-            // Skip text content property for itemscope elements 
-            // (they don't render their property value as text)
-            if element_def.is_scope && matches!(property.target, PropertyTarget::TextContent) {
-                continue;
+        if !skip_property_application {
+            for property in &element_def.properties {
+                // Skip text content property for itemscope elements 
+                // (they don't render their property value as text)
+                if element_def.is_scope && matches!(property.target, PropertyTarget::TextContent) {
+                    continue;
+                }
+                self.apply_property(element, property, element_data)?;
             }
-            self.apply_property(element, property, element_data)?;
         }
 
         // Check if there's a custom handler for this element
         if let Some(tag_name) = element.node_name() {
             if let Some(handler) = self.handlers.get(&tag_name.to_lowercase()) {
                 if handler.can_handle(&Selection::from(element.clone())) {
-                    handler.handle(&Selection::from(element.clone()), element_data)?;
+                    // For elements with itemprop, pass the property value directly
+                    let handler_value = if !element_def.properties.is_empty() {
+                        let prop_name = &element_def.properties[0].name;
+                        if let Some(prop_value) = element_data.get_value(&[prop_name.clone()]) {
+                            prop_value
+                        } else {
+                            element_data
+                        }
+                    } else {
+                        element_data
+                    };
+                    handler.handle(&Selection::from(element.clone()), handler_value)?;
                 }
             }
         }
@@ -427,8 +449,10 @@ impl<'a> Renderer<'a> {
             
             // Check if this element has no child elements (leaf node)
             // Only process text content for leaf nodes to avoid destroying structure
-            let has_child_elements = !element.children().is_empty();
-            if !has_child_elements {
+            let sel = Selection::from(element.clone());
+            let children = sel.select("*");
+            let child_count = children.length();
+            if child_count == 0 {
                 let text = element.text();
                 if text.contains("${") {
                     // Extract variables
@@ -510,12 +534,12 @@ impl<'a> Renderer<'a> {
     
     /// Serialize a selection back to HTML using optimized string building
     fn serialize_selection(&self, selection: &Selection) -> String {
-        with_string_buffer(|buffer| {
-            for node in selection.nodes() {
-                buffer.push_str(&node.html());
-            }
-            buffer.clone()
-        })
+        // For now, avoid the string buffer due to safety issues
+        let mut result = String::new();
+        for node in selection.nodes() {
+            result.push_str(&node.html());
+        }
+        result
     }
     
     /// Perform CSS selector query with optional caching
