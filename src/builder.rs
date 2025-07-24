@@ -10,7 +10,7 @@ use dom_query::Document;
 
 use crate::error::{Error, Result};
 use crate::types::*;
-use crate::handlers::ElementHandler;
+use crate::handlers::{ElementHandler, HandlerRegistry};
 use crate::cache::TemplateCache;
 
 /// Builder for constructing HtmlTemplate instances
@@ -36,6 +36,7 @@ pub struct HtmlTemplateBuilder {
     selector: Option<String>,
     config: TemplateConfig,
     handlers: HashMap<String, Box<dyn ElementHandler>>,
+    handler_registry: Option<HandlerRegistry>,
     custom_cache: Option<TemplateCache>,
 }
 
@@ -55,6 +56,7 @@ impl HtmlTemplateBuilder {
             selector: None,
             config: TemplateConfig::default(),
             handlers: HashMap::new(),
+            handler_registry: None,
             custom_cache: None,
         }
     }
@@ -123,6 +125,25 @@ impl HtmlTemplateBuilder {
     /// Add multiple handlers at once
     pub fn add_handlers(mut self, handlers: HashMap<String, Box<dyn ElementHandler>>) -> Self {
         self.handlers.extend(handlers);
+        self
+    }
+    
+    /// Use a handler registry instead of individual handlers
+    pub fn with_handler_registry(mut self, registry: HandlerRegistry) -> Self {
+        self.handler_registry = Some(registry);
+        self
+    }
+    
+    /// Use the default handler registry with built-in handlers
+    pub fn with_default_handlers(mut self) -> Self {
+        self.handler_registry = Some(HandlerRegistry::with_defaults());
+        self
+    }
+    
+    /// Add a handler to the registry with a specific priority
+    pub fn register_handler(mut self, tag_name: &str, handler: Box<dyn ElementHandler>, priority: i32) -> Self {
+        let registry = self.handler_registry.get_or_insert_with(HandlerRegistry::new);
+        registry.register_with_priority(tag_name, handler, priority);
         self
     }
     

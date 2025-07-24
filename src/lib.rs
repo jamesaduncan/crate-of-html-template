@@ -186,7 +186,11 @@ pub use builder::{HtmlTemplateBuilder, RenderBuilder, RenderResult};
 // ============================================================================
 
 /// Custom element handlers for specialized rendering
-pub use handlers::ElementHandler;
+pub use handlers::{
+    ElementHandler, HandlerRegistry, 
+    // Example handlers for reference
+    ClassHandler, LoggingHandler
+};
 
 /// Streaming rendering for large datasets
 pub use streaming::{StreamingRenderer, StreamingResult, OwnedStreamingResult};
