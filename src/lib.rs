@@ -42,6 +42,7 @@ pub mod node_ext;
 pub mod compiler;
 pub mod renderer;
 pub mod constraints;
+pub mod microdata;
 
 // Re-export commonly used types
 pub use error::{Error, Result};

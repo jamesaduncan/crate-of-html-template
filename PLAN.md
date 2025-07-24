@@ -267,14 +267,14 @@ pub trait ElementHandler: Send + Sync {
   - [x] Evaluate constraints during rendering
   - [x] Write tests for constraint logic
 
-- [ ] **4.2 Cross-Document Rendering**
-  - [ ] Implement `render_from_element`
-  - [ ] Extract microdata from DOM elements
-  - [ ] Preserve source document base URI
-  - [ ] Handle `itemid` generation
-  - [ ] Support async document fetching
-  - [ ] Implement proper URI resolution
-  - [ ] Write integration tests
+- [x] **4.2 Cross-Document Rendering**
+  - [x] Implement `render_from_element`
+  - [x] Extract microdata from DOM elements
+  - [x] Preserve source document base URI (basic implementation)
+  - [x] Handle `itemid` generation
+  - [ ] Support async document fetching (deferred to Phase 5)
+  - [ ] Implement proper URI resolution (deferred to Phase 5)
+  - [x] Write integration tests
 
 - [ ] **4.3 Derive Macros**
   - [ ] Create `macros/Cargo.toml`
@@ -431,9 +431,18 @@ The recommended order for implementation:
 Current Status:
 - **Started**: 2025-07-24
 - **Current Phase**: Phase 4 in progress
-- **Last Completed Task**: 4.1 Constraint System
-- **Next Task**: 4.2 Cross-Document Rendering
+- **Last Completed Task**: 4.2 Cross-Document Rendering
+- **Next Task**: 4.3 Derive Macros
 - **Blockers**: None
+
+### Implementation Notes from Phase 4.2 (Complete):
+- Cross-document rendering implemented with microdata extraction
+- `render_from_element`, `render_from_html`, and `render_from_document` methods added
+- Full microdata extraction supporting nested objects, arrays, and special elements
+- Handles @type and @id attributes from itemtype and itemid
+- Special element value extraction (meta[content], time[datetime], link[href], etc.)
+- Comprehensive integration tests for cross-document scenarios
+- Note: Array content population has known issue (tracked separately)
 
 ### Implementation Notes from Phase 4.1:
 - Constraint system implemented with expression parser

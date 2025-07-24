@@ -3,6 +3,8 @@ use std::collections::HashMap;
 use dom_query::Document;
 
 use crate::handlers::ElementHandler;
+use crate::error::{Error, Result};
+use crate::value::RenderValue;
 
 pub struct HtmlTemplate {
     pub(crate) compiled: Arc<CompiledTemplate>,
@@ -17,6 +19,63 @@ impl std::fmt::Debug for HtmlTemplate {
             .field("config", &self.config)
             .field("handlers", &self.handlers.keys().collect::<Vec<_>>())
             .finish()
+    }
+}
+
+impl HtmlTemplate {
+    /// Create a new HtmlTemplate from compiled template
+    pub fn new(
+        compiled: Arc<CompiledTemplate>,
+        config: TemplateConfig,
+        handlers: std::collections::HashMap<String, Box<dyn ElementHandler>>,
+    ) -> Self {
+        Self {
+            compiled,
+            config,
+            handlers,
+        }
+    }
+    
+    /// Create a template from HTML string and selector
+    pub fn from_str(html: &str, selector: Option<&str>) -> Result<Self> {
+        let compiled = crate::compiler::Compiler::compile(html, selector)?;
+        Ok(Self::new(compiled, TemplateConfig::default(), std::collections::HashMap::new()))
+    }
+    
+    /// Render the template with the given data
+    pub fn render(&self, data: &dyn RenderValue) -> Result<String> {
+        let renderer = crate::renderer::Renderer::new(&self.compiled, &self.handlers);
+        renderer.render(data)
+    }
+    
+    /// Render template using microdata extracted from a DOM element
+    pub fn render_from_element(&self, element: &dom_query::Node) -> Result<String> {
+        let microdata = crate::microdata::extract_microdata(element)?;
+        self.render(&microdata)
+    }
+    
+    /// Render template using microdata extracted from HTML
+    pub fn render_from_html(&self, html: &str) -> Result<Vec<String>> {
+        let items = crate::microdata::extract_microdata_from_html(html)?;
+        let mut results = Vec::new();
+        
+        for item in items {
+            results.push(self.render(&item)?);
+        }
+        
+        Ok(results)
+    }
+    
+    /// Render template using microdata extracted from a document
+    pub fn render_from_document(&self, doc: &Document) -> Result<Vec<String>> {
+        let items = crate::microdata::extract_microdata_from_document(doc)?;
+        let mut results = Vec::new();
+        
+        for item in items {
+            results.push(self.render(&item)?);
+        }
+        
+        Ok(results)
     }
 }
 
