@@ -225,14 +225,14 @@ pub trait ElementHandler: Send + Sync {
 
 ### Phase 3: Data Binding and Rendering
 
-- [ ] **3.1 Basic Renderer**
-  - [ ] Create `src/renderer.rs`
-  - [ ] Implement `render` method
-  - [ ] Handle single element rendering
-  - [ ] Apply text content bindings
-  - [ ] Apply attribute bindings
-  - [ ] Handle missing properties gracefully
-  - [ ] Write tests for basic rendering
+- [x] **3.1 Basic Renderer**
+  - [x] Create `src/renderer.rs`
+  - [x] Implement `render` method
+  - [x] Handle single element rendering
+  - [x] Apply text content bindings
+  - [x] Apply attribute bindings
+  - [x] Handle missing properties gracefully
+  - [x] Write tests for basic rendering
 
 - [ ] **3.2 Array Rendering**
   - [ ] Implement array detection
@@ -249,12 +249,12 @@ pub trait ElementHandler: Send + Sync {
   - [ ] Maintain proper data context
   - [ ] Write tests for nested objects
 
-- [ ] **3.4 Variable Substitution**
-  - [ ] Implement variable resolution
-  - [ ] Support all path formats
-  - [ ] Handle undefined variables
-  - [ ] Implement default values
-  - [ ] Write comprehensive tests
+- [x] **3.4 Variable Substitution**
+  - [x] Implement variable resolution
+  - [x] Support all path formats
+  - [x] Handle undefined variables
+  - [x] Implement default values (empty string)
+  - [x] Write comprehensive tests
 
 ### Phase 4: Advanced Features
 
@@ -430,17 +430,19 @@ The recommended order for implementation:
 
 Current Status:
 - **Started**: 2025-07-24
-- **Current Phase**: Phase 2 Complete, Ready for Phase 3
-- **Last Completed Task**: 2.3 Template Compilation
-- **Next Task**: 3.1 Basic Renderer
+- **Current Phase**: Phase 3 in progress (3.1 and 3.4 complete)
+- **Last Completed Task**: 3.4 Variable Substitution
+- **Next Task**: 3.2 Array Rendering
 - **Blockers**: None
 
-### Implementation Notes from Phase 2:
-- Used dom_query's `Selection` type instead of raw `NodeRef` for element manipulation
-- Handled template element content extraction properly using `template_contents` field
-- Implemented implicit variable binding for elements with `itemprop` but no explicit `${}` syntax
-- Created helper module `node_ext.rs` for DOM manipulation utilities
-- All parser and compiler tests passing
+### Implementation Notes from Phase 3.1 and 3.4:
+- Implemented basic rendering engine with full variable substitution
+- Handle both root elements and descendants when matching selectors
+- Support implicit variable binding (empty elements with itemprop get data)
+- Process variables in both text content and attributes
+- Missing data renders as empty strings
+- Element finding works correctly for both root and nested elements
+- All basic rendering tests passing
 
 ## Notes for Resuming Work
 

@@ -25,7 +25,7 @@ impl Parser {
         let template = self.find_template_element()?;
         
         // Get the original template HTML for storage
-        let template_html = template.html().to_string();
+        let _template_html = template.html().to_string();
         
         // For template elements, we need to extract their content properly
         // First, try to access the template_contents directly
@@ -38,19 +38,19 @@ impl Parser {
                 .and_then(|elem| elem.template_contents)
         }).flatten();
         
-        // Create a new document from template content
-        let content_doc = if let Some(contents_id) = template_contents_id {
+        // Create a new document from template content and store the inner HTML
+        let (content_doc, content_html) = if let Some(contents_id) = template_contents_id {
             // We have template contents - need to serialize them to HTML
             let contents_node = dom_query::Node::new(contents_id, template_node.tree);
             let inner_html = contents_node.inner_html();
-            Document::from(inner_html.as_ref())
+            (Document::from(inner_html.as_ref()), inner_html.to_string())
         } else {
             // Fallback: parse the template's inner HTML
             let inner_html = template.html();
             if inner_html.trim().is_empty() {
                 return Err(Error::ParseError("Template element has no content".to_string()));
             }
-            Document::from(inner_html.as_ref())
+            (Document::from(inner_html.as_ref()), inner_html.to_string())
         };
         
         // Select content based on root selector
@@ -82,7 +82,7 @@ impl Parser {
             elements,
             constraints,
             base_uri: self.extract_base_uri(),
-            template_html,
+            template_html: content_html,
         })
     }
 
