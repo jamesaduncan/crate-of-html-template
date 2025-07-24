@@ -95,7 +95,7 @@ impl<'a> ConstraintContext<'a> {
             return self.evaluate_less_than(left.trim(), right.trim());
         }
         
-        Err(Error::ParseError(format!("Invalid constraint expression: {}", expr)))
+        Err(Error::parse_owned(format!("Invalid constraint expression: {}", expr)))
     }
     
     /// Check if a property exists and is truthy

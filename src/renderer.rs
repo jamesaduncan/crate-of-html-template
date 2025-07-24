@@ -16,6 +16,7 @@ use crate::value::RenderValue;
 use crate::handlers::ElementHandler;
 use crate::node_ext::NodeExt;
 use crate::constraints::{ConstraintContext, ConstraintEvaluator};
+use crate::utils::{replace_multiple_cow, split_path_cow, with_string_buffer};
 
 static VARIABLE_REGEX: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r"\$\{([^}]+)\}").expect("Invalid variable regex")
@@ -56,7 +57,7 @@ impl<'a> Renderer<'a> {
         };
 
         if root.is_empty() {
-            return Err(Error::RenderError("No root elements found in template".to_string()));
+            return Err(Error::render_static("No root elements found in template"));
         }
 
         // Keep track of which elements have been processed to avoid duplicates
@@ -152,7 +153,7 @@ impl<'a> Renderer<'a> {
             // For itemscope elements, extract the property value as the new context
             let prop_name = element_def.properties.first()
                 .map(|p| &p.name)
-                .ok_or_else(|| Error::RenderError("Itemscope element missing property name".to_string()))?;
+                .ok_or_else(|| Error::render_static("Itemscope element missing property name"))?;
             
             // Get the nested data object
             if let Some(nested_value) = data.get_value(&[prop_name.clone()]) {
@@ -239,10 +240,10 @@ impl<'a> Renderer<'a> {
         Ok(())
     }
 
-    /// Process variable substitution in text
+    /// Process variable substitution in text using zero-copy optimizations
     fn process_variables_in_text<'b>(
         &self,
-        text: &str,
+        text: &'b str,
         variables: &[Variable],
         data: &'b dyn RenderValue,
     ) -> Result<Cow<'b, str>> {
@@ -262,14 +263,16 @@ impl<'a> Renderer<'a> {
             return Ok(data.get_property(&var.path).unwrap_or_else(|| Cow::Borrowed("")));
         }
         
-        // Otherwise, do string substitution
-        let mut result = text.to_string();
-        for var in variables {
-            let value = data.get_property(&var.path)
-                .unwrap_or_else(|| Cow::Borrowed(""));
-            result = result.replace(&var.raw, &value);
-        }
-        Ok(Cow::Owned(result))
+        // Use zero-copy replacement for multiple variables
+        let replacements: Vec<(String, Cow<str>)> = variables.iter()
+            .map(|var| {
+                let value = data.get_property(&var.path)
+                    .unwrap_or_else(|| Cow::Borrowed(""));
+                (var.raw.clone(), value)
+            })
+            .collect();
+        
+        Ok(replace_multiple_cow(text, &replacements))
     }
 
     /// Render an array element by cloning it for each array item
@@ -281,7 +284,7 @@ impl<'a> Renderer<'a> {
     ) -> Result<()> {
         // Array properties have their name without the [] suffix
         let array_prop_name = if element_def.properties.is_empty() {
-            return Err(Error::RenderError("Array element has no properties".to_string()));
+            return Err(Error::render_static("Array element has no properties"));
         } else {
             &element_def.properties[0].name
         };
@@ -432,7 +435,7 @@ impl<'a> Renderer<'a> {
                         .captures_iter(&text)
                         .map(|cap| {
                             let var_path = &cap[1];
-                            let path = var_path.split('.').map(String::from).collect();
+                            let path = split_path_cow(var_path).into_owned();
                             Variable {
                                 path,
                                 raw: cap[0].to_string(),
@@ -456,7 +459,7 @@ impl<'a> Renderer<'a> {
                             .captures_iter(attr_value)
                             .map(|cap| {
                                 let var_path = &cap[1];
-                                let path = var_path.split('.').map(String::from).collect();
+                                let path = split_path_cow(var_path).into_owned();
                                 Variable {
                                     path,
                                     raw: cap[0].to_string(),
@@ -504,13 +507,14 @@ impl<'a> Renderer<'a> {
         Ok(())
     }
     
-    /// Serialize a selection back to HTML
+    /// Serialize a selection back to HTML using optimized string building
     fn serialize_selection(&self, selection: &Selection) -> String {
-        let mut html = String::new();
-        for node in selection.nodes() {
-            html.push_str(&node.html());
-        }
-        html
+        with_string_buffer(|buffer| {
+            for node in selection.nodes() {
+                buffer.push_str(&node.html());
+            }
+            buffer.clone()
+        })
     }
 }
 

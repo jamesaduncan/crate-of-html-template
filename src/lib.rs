@@ -44,6 +44,7 @@ pub mod renderer;
 pub mod constraints;
 pub mod microdata;
 pub mod streaming;
+pub mod utils;
 
 // Re-export commonly used types
 pub use error::{Error, Result};

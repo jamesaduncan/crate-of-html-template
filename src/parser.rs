@@ -5,6 +5,7 @@ use once_cell::sync::Lazy;
 use crate::error::{Error, Result};
 use crate::types::*;
 use crate::node_ext::NodeExt;
+use crate::utils::{split_path_cow, with_string_buffer};
 
 static VARIABLE_REGEX: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r"\$\{([^}]+)\}").expect("Invalid variable regex")
@@ -30,7 +31,7 @@ impl Parser {
         // For template elements, we need to extract their content properly
         // First, try to access the template_contents directly
         let template_node = template.nodes().first()
-            .ok_or_else(|| Error::ParseError("No template element found".to_string()))?;
+            .ok_or_else(|| Error::parse_static("No template element found"))?;
         
         // Access the template contents via the query method
         let template_contents_id = template_node.query(|node| {
@@ -48,7 +49,7 @@ impl Parser {
             // Fallback: parse the template's inner HTML
             let inner_html = template.html();
             if inner_html.trim().is_empty() {
-                return Err(Error::ParseError("Template element has no content".to_string()));
+                return Err(Error::parse_static("Template element has no content"));
             }
             (Document::from(inner_html.as_ref()), inner_html.to_string())
         };
@@ -70,7 +71,7 @@ impl Parser {
         };
 
         if content.is_empty() {
-            return Err(Error::ParseError("No content found in template".to_string()));
+            return Err(Error::parse_static("No content found in template"));
         }
 
         // Parse the template structure
@@ -89,7 +90,7 @@ impl Parser {
     fn find_template_element(&self) -> Result<Selection> {
         let templates = self.document.select("template");
         if templates.is_empty() {
-            return Err(Error::ParseError("No template element found".to_string()));
+            return Err(Error::parse_static("No template element found"));
         }
         Ok(templates)
     }
@@ -116,7 +117,7 @@ impl Parser {
     
     fn parse_element_node(&self, element: &dom_query::Node, elements: &mut Vec<TemplateElement>) -> Result<()> {
         let itemprop = element.attr("itemprop")
-            .ok_or_else(|| Error::ParseError("Element missing itemprop".to_string()))?;
+            .ok_or_else(|| Error::parse_static("Element missing itemprop"))?;
         
         let is_array = itemprop.ends_with("[]");
         let clean_name = if is_array {
@@ -167,7 +168,7 @@ impl Parser {
                 variables: if text_variables.is_empty() {
                     // Create an implicit variable binding
                     vec![Variable {
-                        path: vec![prop_name.to_string()],
+                        path: split_path_cow(prop_name).into_owned(),
                         raw: format!("${{{}}}", prop_name),
                     }]
                 } else {
@@ -238,16 +239,23 @@ impl Parser {
     }
 
     fn parse_variable_path(&self, path: &str) -> Vec<String> {
-        path.split('.')
-            .map(|segment| {
-                // Handle array access like items[0]
-                if let Some(bracket_pos) = segment.find('[') {
-                    segment[..bracket_pos].to_string()
-                } else {
-                    segment.to_string()
-                }
-            })
-            .collect()
+        // Use zero-copy path splitting for simple cases
+        if !path.contains('[') {
+            // Simple case without array access
+            split_path_cow(path).into_owned()
+        } else {
+            // Complex case with array access - need to handle brackets
+            path.split('.')
+                .map(|segment| {
+                    // Handle array access like items[0]
+                    if let Some(bracket_pos) = segment.find('[') {
+                        segment[..bracket_pos].to_string()
+                    } else {
+                        segment.to_string()
+                    }
+                })
+                .collect()
+        }
     }
 
     fn extract_constraints(&self, root: &Selection) -> Result<Vec<Constraint>> {
