@@ -39,3 +39,7 @@ default = []
 derive = ["html-template-macros"]
 async = ["futures"]
 
+[[bench]]
+name = "simple_benchmark"
+harness = false
+
