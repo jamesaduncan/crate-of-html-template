@@ -221,7 +221,7 @@ pub trait ElementHandler: Send + Sync {
   - [x] Optimize variable paths
   - [x] Create element index
   - [x] Build constraint dependency graph
-  - [x] Write performance benchmarks - Note: Basic tests written, full benchmarks for later
+  - [x] Write performance benchmarks - Note: Basic tests written, full benchmarks in Phase 8.5
 
 ### Phase 3: Data Binding and Rendering
 
@@ -392,6 +392,7 @@ pub trait ElementHandler: Send + Sync {
 - [ ] **8.5 Benchmarks**
   - [ ] Create `benches/` directory
   - [ ] Benchmark parsing performance
+  - [ ] Benchmark template compilation performance
   - [ ] Benchmark rendering performance
   - [ ] Benchmark memory usage
   - [ ] Compare with/without optimizations
