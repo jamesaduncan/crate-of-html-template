@@ -5,6 +5,7 @@
 
 use std::collections::HashMap;
 use std::path::Path;
+use std::time::Duration;
 
 use dom_query::Document;
 
@@ -588,5 +589,154 @@ mod tests {
         assert!(template.config.zero_copy());
         assert!(!template.config.cache_compiled_templates());
         assert!(!template.config.cache_external_documents());
+    }
+    
+    #[test]
+    fn test_builder_from_element() {
+        // Builder expects template element, so let's wrap our div in a template
+        let html = r#"<template><div itemprop="test">Element content</div></template>"#;
+        let doc = dom_query::Document::from(html);
+        let selection = doc.select("template");
+        let element = selection.nodes().first().unwrap();
+        
+        let template = HtmlTemplateBuilder::new()
+            .from_element(element)
+            .no_caching()
+            .build()
+            .unwrap();
+        
+        let data = json!({"test": "From element"});
+        let result = template.render(&data).unwrap();
+        // Just check that we got a successful render
+        assert!(!result.is_empty());
+    }
+    
+    #[test]
+    fn test_builder_add_handlers() {
+        use crate::handlers::{ElementHandler, InputHandler, SelectHandler};
+        use std::collections::HashMap;
+        
+        let mut handlers: HashMap<String, Box<dyn ElementHandler>> = HashMap::new();
+        handlers.insert("input".to_string(), Box::new(InputHandler::new()));
+        handlers.insert("select".to_string(), Box::new(SelectHandler::new()));
+        
+        let html = r#"<template><input itemprop="field"></template>"#;
+        let template = HtmlTemplateBuilder::new()
+            .from_str(html)
+            .add_handlers(handlers)
+            .no_caching()
+            .build()
+            .unwrap();
+        
+        // Verify handlers were added
+        assert_eq!(template.handlers.len(), 2);
+    }
+    
+    #[test]
+    fn test_builder_with_handler_registry() {
+        use crate::handlers::HandlerRegistry;
+        
+        let registry = HandlerRegistry::with_defaults();
+        
+        let html = r#"<template><div>Test</div></template>"#;
+        let template = HtmlTemplateBuilder::new()
+            .from_str(html)
+            .with_handler_registry(registry)
+            .no_caching()
+            .build()
+            .unwrap();
+        
+        // The template should have a handler registry set up
+        let data = json!({});
+        let _result = template.render(&data).unwrap();
+    }
+    
+    #[test]
+    fn test_builder_register_handler() {
+        use crate::handlers::LoggingHandler;
+        
+        let html = r#"<template><div>Test</div></template>"#;
+        let template = HtmlTemplateBuilder::new()
+            .from_str(html)
+            .register_handler("div", Box::new(LoggingHandler::new()), 100)
+            .no_caching()
+            .build()
+            .unwrap();
+        
+        let data = json!({});
+        let _result = template.render(&data).unwrap();
+    }
+    
+    #[test]
+    fn test_builder_with_custom_cache() {
+        use crate::cache::{TemplateCache, CacheConfig};
+        
+        let cache_config = CacheConfig {
+            template_cache_size: 50,
+            template_ttl: Some(Duration::from_secs(300)),
+            ..Default::default()
+        };
+        let custom_cache = TemplateCache::with_config(cache_config);
+        
+        let html = r#"<template><div>Test</div></template>"#;
+        let template = HtmlTemplateBuilder::new()
+            .from_str(html)
+            .with_cache(custom_cache)
+            .build()
+            .unwrap();
+        
+        let data = json!({});
+        let _result = template.render(&data).unwrap();
+    }
+    
+    #[test]
+    fn test_builder_from_file_not_found() {
+        let result = HtmlTemplateBuilder::from_template_file("/nonexistent/file.html");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Failed to read template file"));
+    }
+    
+    #[test]
+    fn test_render_builder_with_handler() {
+        use crate::handlers::ClassHandler;
+        
+        let html = r#"<template><div itemprop="content"></div></template>"#;
+        let template = HtmlTemplateBuilder::new()
+            .from_str(html)
+            .with_selector("div")
+            .no_caching()
+            .build()
+            .unwrap();
+        
+        let data = json!({"content": "test"});
+        
+        // Note: RenderBuilder's with_handler doesn't actually affect rendering yet
+        let result = RenderBuilder::new(&template)
+            .with_handler("div", Box::new(ClassHandler::new()))
+            .render(&data)
+            .unwrap();
+        
+        assert!(result.contains("test"));
+    }
+    
+    #[test]
+    fn test_render_builder_error_on_missing() {
+        let html = r#"<template><div itemprop="required"></div></template>"#;
+        let template = HtmlTemplateBuilder::new()
+            .from_str(html)
+            .with_selector("div")
+            .no_caching()
+            .build()
+            .unwrap();
+        
+        let data = json!({});
+        
+        // Note: error_on_missing_properties is not implemented yet
+        let result = RenderBuilder::new(&template)
+            .error_on_missing_properties(true)
+            .render(&data);
+        
+        // Currently this doesn't error, it just renders empty
+        assert!(result.is_ok());
     }
 }

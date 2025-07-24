@@ -163,6 +163,8 @@ pub mod constraints;
 pub mod microdata;
 #[doc(hidden)]
 pub mod utils;
+#[doc(hidden)]
+pub mod edge_case_tests;
 
 // ============================================================================
 // Core API - Essential types for basic usage

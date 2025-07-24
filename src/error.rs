@@ -123,4 +123,30 @@ mod tests {
         let err: Error = io_err.into();
         assert!(matches!(err, Error::IoError(_)));
     }
+    
+    #[test]
+    fn test_all_error_variants() {
+        // Test all error variants with owned strings
+        let parse_err = Error::parse_owned("parse error".to_string());
+        assert_eq!(parse_err.to_string(), "Parse error: parse error");
+        
+        let render_err = Error::render_owned("render error".to_string());
+        assert_eq!(render_err.to_string(), "Render error: render error");
+        
+        let dom_err = Error::dom_owned("dom error".to_string());
+        assert_eq!(dom_err.to_string(), "DOM error: dom error");
+        
+        let io_err = Error::io("io error message".to_string());
+        assert_eq!(io_err.to_string(), "IO error: io error message");
+    }
+    
+    #[test]
+    fn test_error_chaining() {
+        // Test that errors can be properly converted and chained
+        let original = std::io::Error::new(std::io::ErrorKind::PermissionDenied, "access denied");
+        let wrapped: Error = original.into();
+        
+        // Verify the error message is preserved
+        assert!(wrapped.to_string().contains("access denied"));
+    }
 }

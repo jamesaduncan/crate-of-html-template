@@ -690,9 +690,13 @@ mod tests {
         // Test that global cache can be initialized and accessed
         init_global_cache();
         let cache = get_global_cache();
+        
+        // Clear any existing entries from other tests
+        cache.clear_all();
+        
         let stats = cache.get_stats();
         
-        // Should have default configuration
+        // Should have no entries after clearing
         assert_eq!(stats.total_entries(), 0);
     }
 }

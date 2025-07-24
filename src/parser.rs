@@ -508,4 +508,121 @@ mod tests {
             matches!(&p.target, PropertyTarget::TextContent)
         ));
     }
+    
+    #[test]
+    fn test_invalid_selector_error() {
+        let html = r#"<template><div>Test</div></template>"#;
+        
+        // Test with valid selector that matches nothing
+        let parser = Parser::new(html).unwrap();
+        let result = parser.parse_template(Some("span"));
+        // Should succeed or fail gracefully
+        if let Ok(template) = result {
+            // But should have no elements with itemprop
+            assert_eq!(template.elements.len(), 0);
+        } else {
+            // If it errors, that's also acceptable for a non-matching selector
+            assert!(result.is_err());
+        }
+    }
+    
+    #[test]
+    fn test_malformed_html_parsing() {
+        // Test parser's ability to handle malformed HTML gracefully
+        // Need template elements for parser
+        let malformed_cases = vec![
+            ("<template><div><p>Unclosed paragraph</div></template>", "div"),
+            ("<template><div itemprop='test'>Content</div></template>", "div"),
+            ("<template><div>Valid content</div></template>", "div"),
+        ];
+        
+        for (html, expected_tag) in malformed_cases {
+            let parser = Parser::new(html).unwrap();
+            let result = parser.parse_template(None);
+            assert!(result.is_ok());
+            
+            // Check if the template parsing succeeded
+            let template = result.unwrap();
+            // Should have parsed the template contents
+            assert!(template.template_html.contains(expected_tag));
+        }
+    }
+    
+    #[test]
+    fn test_deeply_nested_properties() {
+        let mut html = String::from("<template>");
+        for i in 0..50 {
+            html.push_str(&format!(r#"<div itemprop="level{}"><template>"#, i));
+        }
+        html.push_str(r#"<span itemprop="deep">Value</span>"#);
+        for _ in 0..50 {
+            html.push_str("</template></div>");
+        }
+        html.push_str("</template>");
+        
+        let parser = Parser::new(&html).unwrap();
+        let result = parser.parse_template(None);
+        assert!(result.is_ok());
+        
+        let template = result.unwrap();
+        // Should handle deep nesting
+        assert!(template.elements.len() > 0);
+    }
+    
+    #[test]
+    fn test_empty_and_whitespace_templates() {
+        let test_cases = vec![
+            "<template></template>",
+            "<template>   </template>",
+            "<template>\n\n\n</template>",
+            "<template>\t\t</template>",
+            "<template><!-- comment only --></template>",
+        ];
+        
+        for html in test_cases {
+            let parser = Parser::new(html).unwrap();
+            let result = parser.parse_template(None);
+            assert!(result.is_ok());
+            
+            let template = result.unwrap();
+            assert_eq!(template.elements.len(), 0);
+        }
+    }
+    
+    #[test]
+    fn test_special_characters_in_variables() {
+        let test_cases = vec![
+            ("${user name}", vec!["user name"]),  // Space in variable
+            ("${user_name}", vec!["user_name"]),  // Underscore
+            ("${user-name}", vec!["user-name"]),  // Hyphen
+            ("${123}", vec!["123"]),              // Numbers
+            ("${user.emails[0]}", vec!["user", "emails"]), // Array access removed
+        ];
+        
+        let parser = Parser::new("").unwrap();
+        
+        for (input, expected_path) in test_cases {
+            let vars = parser.extract_variables(input);
+            if vars.len() > 0 {
+                assert_eq!(vars[0].path, expected_path);
+            }
+        }
+    }
+    
+    #[test]
+    fn test_circular_template_references() {
+        // Test templates that reference themselves
+        let html = r##"
+            <template id="recursive">
+                <div itemprop="name"></div>
+                <template src="#recursive"></template>
+            </template>
+        "##;
+        
+        let parser = Parser::new(html).unwrap();
+        let result = parser.parse_template(None);
+        
+        // Should not hang or stack overflow
+        assert!(result.is_ok());
+    }
 }

@@ -533,6 +533,7 @@ mod tests {
     use crate::compiler::Compiler;
     use crate::types::{Constraint, ConstraintType};
     use serde_json::json;
+    use std::collections::HashMap;
     
     fn create_test_template(html: &str) -> Arc<CompiledTemplate> {
         let parser = Parser::new(html).unwrap();
@@ -913,5 +914,171 @@ mod tests {
         assert!(result.contains("Second Post"));
         assert!(result.contains("Bob"));
         assert!(result.contains("More interesting content"));
+    }
+    
+    #[test]
+    fn test_render_invalid_data_types() {
+        let html = r#"
+            <template>
+                <div itemprop="test"></div>
+            </template>
+        "#;
+        let template = create_test_template(html);
+        let handlers = HashMap::new();
+        let renderer = Renderer::new(&template, &handlers);
+        
+        // Test with null value
+        let data = json!(null);
+        let result = renderer.render(&data);
+        assert!(result.is_ok());
+        
+        // Test with boolean
+        let data = json!(true);
+        let result = renderer.render(&data);
+        assert!(result.is_ok());
+        
+        // Test with number
+        let data = json!(42);
+        let result = renderer.render(&data);
+        assert!(result.is_ok());
+    }
+    
+    #[test]
+    fn test_render_deeply_nested_data() {
+        let html = r#"
+            <template>
+                <div itemprop="value">${a.b.c.d.e.f.g}</div>
+            </template>
+        "#;
+        let template = create_test_template(html);
+        let handlers = HashMap::new();
+        let renderer = Renderer::new(&template, &handlers);
+        
+        let data = json!({
+            "a": {
+                "b": {
+                    "c": {
+                        "d": {
+                            "e": {
+                                "f": {
+                                    "g": "Deep value"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        });
+        
+        let result = renderer.render(&data).unwrap();
+        assert!(result.contains("Deep value"));
+    }
+    
+    #[test]
+    fn test_render_with_special_characters() {
+        let html = r#"
+            <template>
+                <div itemprop="content"></div>
+            </template>
+        "#;
+        let template = create_test_template(html);
+        let handlers = HashMap::new();
+        let renderer = Renderer::new(&template, &handlers);
+        
+        let data = json!({
+            "content": "<script>alert('XSS')</script> & \"quotes\" 'apostrophes'"
+        });
+        
+        let result = renderer.render(&data).unwrap();
+        // dom_query handles escaping automatically when setting text content
+        // It escapes < and > but may not escape quotes in text content
+        assert!(result.contains("&lt;script&gt;"));
+        assert!(result.contains("&amp;"));
+        // Check for the actual quotes in the output (may not be escaped in text content)
+        assert!(result.contains("quotes") || result.contains("&quot;"));
+    }
+    
+    #[test]
+    fn test_render_with_unicode() {
+        let html = r#"
+            <template>
+                <div itemprop="emoji"></div>
+                <div itemprop="chinese"></div>
+                <div itemprop="rtl"></div>
+            </template>
+        "#;
+        let template = create_test_template(html);
+        let handlers = HashMap::new();
+        let renderer = Renderer::new(&template, &handlers);
+        
+        let data = json!({
+            "emoji": "Hello 😀🎉🌟",
+            "chinese": "你好世界",
+            "rtl": "مرحبا بالعالم"
+        });
+        
+        let result = renderer.render(&data).unwrap();
+        assert!(result.contains("Hello 😀🎉🌟"));
+        assert!(result.contains("你好世界"));
+        assert!(result.contains("مرحبا بالعالم"));
+    }
+    
+    #[test]
+    fn test_render_large_dataset() {
+        let html = r#"
+            <template>
+                <ul>
+                    <li itemprop="items[]">
+                        <span itemprop="id"></span>: <span itemprop="value"></span>
+                    </li>
+                </ul>
+            </template>
+        "#;
+        let template = create_test_template(html);
+        let handlers = HashMap::new();
+        let renderer = Renderer::new(&template, &handlers);
+        
+        // Create large array
+        let mut items = Vec::new();
+        for i in 0..1000 {
+            items.push(json!({
+                "id": i,
+                "value": format!("Item {}", i)
+            }));
+        }
+        
+        let data = json!({ "items": items });
+        let result = renderer.render(&data).unwrap();
+        
+        // Should render all items
+        assert!(result.contains("Item 0"));
+        assert!(result.contains("Item 999"));
+    }
+    
+    #[test]
+    fn test_render_with_null_values() {
+        let html = r#"
+            <template>
+                <div>
+                    <span itemprop="nullable"></span>
+                    <span itemprop="defined"></span>
+                </div>
+            </template>
+        "#;
+        let template = create_test_template(html);
+        let handlers = HashMap::new();
+        let renderer = Renderer::new(&template, &handlers);
+        
+        let data = json!({
+            "nullable": null,
+            "defined": "value"
+        });
+        
+        let result = renderer.render(&data).unwrap();
+        // The second span should contain "value"
+        assert!(result.contains("value"));
+        // The result should have two span elements
+        let span_count = result.matches("<span").count();
+        assert_eq!(span_count, 2, "Expected 2 span elements, found {}", span_count);
     }
 }
