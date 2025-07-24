@@ -8,6 +8,13 @@ pub trait RenderValue {
     fn as_array(&self) -> Option<Vec<&dyn RenderValue>>;
     fn get_type(&self) -> Option<&str>;
     fn get_id(&self) -> Option<&str>;
+    
+    /// Get a nested value as a RenderValue (for arrays and objects)
+    fn get_value(&self, path: &[String]) -> Option<&dyn RenderValue> {
+        // Default implementation returns None
+        // Implementations can override to provide nested value access
+        None
+    }
 }
 
 impl RenderValue for JsonValue {
@@ -82,6 +89,29 @@ impl RenderValue for JsonValue {
             }
             _ => None,
         }
+    }
+    
+    fn get_value(&self, path: &[String]) -> Option<&dyn RenderValue> {
+        if path.is_empty() {
+            return Some(self);
+        }
+        
+        let mut current = self;
+        for segment in path {
+            match current {
+                JsonValue::Object(obj) => {
+                    current = obj.get(segment)?;
+                }
+                JsonValue::Array(arr) => {
+                    // Try to parse segment as index
+                    let index = segment.parse::<usize>().ok()?;
+                    current = arr.get(index)?;
+                }
+                _ => return None,
+            }
+        }
+        
+        Some(current)
     }
 }
 
