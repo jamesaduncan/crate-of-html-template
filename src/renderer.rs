@@ -140,7 +140,23 @@ impl<'a> Renderer<'a> {
         } else {
             // Render single element
             for element in &matching_elements {
-                self.render_single_element(element, element_def, data)?;
+                // Check if this element is inside an array container
+                // If so, skip it - it will be rendered when the array is processed
+                let mut current = element.parent();
+                let mut is_inside_array = false;
+                while let Some(parent) = current {
+                    if let Some(itemprop) = parent.attr("itemprop") {
+                        if itemprop.ends_with("[]") {
+                            is_inside_array = true;
+                            break;
+                        }
+                    }
+                    current = parent.parent();
+                }
+                
+                if !is_inside_array {
+                    self.render_single_element(element, element_def, data)?;
+                }
             }
         }
 
@@ -196,17 +212,6 @@ impl<'a> Renderer<'a> {
                 if element_def.is_scope && matches!(property.target, PropertyTarget::TextContent) {
                     continue;
                 }
-                
-                // Skip text content properties for elements that contain nested arrays
-                // to avoid overwriting the properly structured nested content
-                if matches!(property.target, PropertyTarget::TextContent) {
-                    let element_selection = Selection::from(element.clone());
-                    let has_nested_arrays = element_selection.select("[itemprop$='[]']").length() > 0;
-                    if has_nested_arrays {
-                        continue;
-                    }
-                }
-                
                 self.apply_property(element, property, element_data)?;
             }
         }
@@ -253,6 +258,18 @@ impl<'a> Renderer<'a> {
             PropertyTarget::Value => element.attr("value").unwrap_or_default(),
         };
 
+        // Check if we can resolve the variables
+        // For properties with variables, check if the data is available
+        if !property.variables.is_empty() {
+            // Check if the first variable can be resolved
+            if let Some(first_var) = property.variables.first() {
+                if data.get_value(&first_var.path).is_none() {
+                    // Variable can't be resolved, skip this property
+                    return Ok(());
+                }
+            }
+        }
+
         // Process the content with variable substitution
         let value = if property.variables.is_empty() {
             // No variables, use the property name directly
@@ -281,6 +298,95 @@ impl<'a> Renderer<'a> {
         Ok(())
     }
 
+    /// Render array item HTML by processing the template with data
+    /// This is a workaround for dom_query limitations with cloned documents
+    fn render_array_item_html(
+        &self,
+        template_html: &str,
+        item_data: &dyn RenderValue,
+        _array_prop_name: &str,
+    ) -> Result<String> {
+        // Parse the template HTML
+        let item_doc = Document::from(template_html);
+        
+        // Find the array element (should be the root element)
+        let array_selection = item_doc.select("*[itemprop$='[]']");
+        let array_element = if let Some(elem) = array_selection.nodes().first() {
+            elem
+        } else {
+            return Err(Error::render_static("Array element not found in template"));
+        };
+        
+        // Convert the array element to a regular element
+        if let Some(itemprop) = array_element.attr("itemprop") {
+            if itemprop.ends_with("[]") {
+                let clean_name = &itemprop[..itemprop.len() - 2];
+                array_element.set_attr("itemprop", clean_name);
+            }
+        }
+        
+        // Process all elements with itemprops within this template
+        self.process_template_elements(&item_doc, item_data)?;
+        
+        // Process variables in any text content (including elements with itemprop)
+        // This handles cases like <p>Age: ${age}</p> and <li itemprop="items[]">${name}</li>
+        // Due to dom_query limitations, we need to manually process these
+        let all_elements = item_doc.select("*");
+        for element in all_elements.nodes() {
+            let text = element.text();
+            if text.contains("${") {
+                // Extract variables
+                let variables = crate::parser::VARIABLE_REGEX
+                    .captures_iter(&text)
+                    .map(|cap| {
+                        let var_path = &cap[1];
+                        let path = crate::utils::split_path_cow(var_path).into_owned();
+                        crate::types::Variable {
+                            path,
+                            raw: cap[0].to_string(),
+                        }
+                    })
+                    .collect::<Vec<_>>();
+                
+                if !variables.is_empty() {
+                    let processed_text = self.process_variables_in_text(&text, &variables, item_data)?;
+                    element.set_text_content(&processed_text);
+                }
+            }
+        }
+        
+        // Extract just the array element's HTML
+        let result_html = array_element.html();
+        Ok(result_html.to_string())
+    }
+    
+    /// Process all template elements within a document
+    fn process_template_elements(
+        &self,
+        doc: &Document,
+        data: &dyn RenderValue,
+    ) -> Result<()> {
+        // Process each template element that isn't an array
+        for element_def in &self.template.elements {
+            if element_def.is_array {
+                continue; // Skip array elements - they're handled separately
+            }
+            
+            // Find elements matching this definition
+            // Use a simple attribute selector instead of complex selectors
+            if let Some(prop_name) = element_def.properties.first().map(|p| &p.name) {
+                let selector = format!("[itemprop='{}']", prop_name);
+                let elements = doc.select(&selector);
+                
+                for element_node in elements.nodes() {
+                    self.render_single_element(&element_node, element_def, data)?;
+                }
+            }
+        }
+        
+        Ok(())
+    }
+
     /// Process variable substitution in text using zero-copy optimizations
     fn process_variables_in_text<'b>(
         &self,
@@ -295,32 +401,26 @@ impl<'a> Renderer<'a> {
         // If text is empty and we have one variable, it's an implicit binding
         if text.is_empty() && variables.len() == 1 {
             let var = &variables[0];
-            return Ok(data
-                .get_property(&var.path)
-                .unwrap_or(Cow::Borrowed("")));
+            return Ok(data.get_property(&var.path).unwrap_or(Cow::Borrowed("")));
         }
 
         // If there's only one variable and it's the entire text, return just the value
         if variables.len() == 1 && variables[0].raw == text {
             let var = &variables[0];
-            return Ok(data
-                .get_property(&var.path)
-                .unwrap_or(Cow::Borrowed("")));
+            return Ok(data.get_property(&var.path).unwrap_or(Cow::Borrowed("")));
         }
 
         // Use zero-copy replacement for multiple variables
         let replacements: Vec<(String, Cow<str>)> = variables
             .iter()
             .map(|var| {
-                let value = data
-                    .get_property(&var.path)
-                    .unwrap_or(Cow::Borrowed(""));
+                let value = data.get_property(&var.path).unwrap_or(Cow::Borrowed(""));
                 (var.raw.clone(), value)
             })
             .collect();
 
         let result = replace_multiple_cow(text, &replacements);
-        
+
         // Handle escaped variables: convert $${variable} to ${variable}
         if result.contains("$${") {
             let unescaped = result.replace("$${", "${");
@@ -379,6 +479,7 @@ impl<'a> Renderer<'a> {
                 continue;
             }
             let parent_node = parent.unwrap();
+
             // Store the template HTML
             let template_html = element.html();
 
@@ -392,39 +493,81 @@ impl<'a> Renderer<'a> {
                 let item_doc = Document::from(template_html.as_ref());
 
                 // We need to render all elements within this cloned item
-                // Get the root element - select body content first
-                let item_root = item_doc.select("body > *");
-                let item_root = if item_root.is_empty() {
-                    item_doc.select(":root > *")
-                } else {
-                    item_root
-                };
+                // Get all elements in the document
+                let item_root = item_doc.select("*");
 
-                // Process all template elements within this item
-                for element_to_render in &self.template.elements {
-                    // Skip the current array element to avoid infinite recursion
-                    if element_to_render.selector == element_def.selector {
-                        continue;
+                // First, process the array element itself 
+                // Find the actual array element by selector
+                let array_elements_in_item = item_root.select(&element_def.selector);
+                for array_element in array_elements_in_item.nodes() {
+                    // Remove the [] suffix from the itemprop attribute to convert from array template to item
+                    if let Some(itemprop) = array_element.attr("itemprop") {
+                        if itemprop.ends_with("[]") {
+                            let clean_name = &itemprop[..itemprop.len() - 2];
+                            array_element.set_attr("itemprop", clean_name);
+                        }
                     }
-
-
-                    // Use render_element which handles finding and rendering
-                    self.render_element(&item_doc, &item_root, element_to_render, *item)?;
+                    
+                    // Check if this element has variables in its text content
+                    let text = array_element.text();
+                    if text.contains("${") {
+                        // Process variables in the text content
+                        let variables = crate::parser::VARIABLE_REGEX
+                            .captures_iter(&text)
+                            .map(|cap| {
+                                let var_path = &cap[1];
+                                let path = crate::utils::split_path_cow(var_path).into_owned();
+                                crate::types::Variable {
+                                    path,
+                                    raw: cap[0].to_string(),
+                                }
+                            })
+                            .collect::<Vec<_>>();
+                        
+                        if !variables.is_empty() {
+                            let processed_text = self.process_variables_in_text(&text, &variables, *item)?;
+                            array_element.set_text_content(&processed_text);
+                        }
+                    }
                 }
 
-                // For array items, process the article element itself with variables
-                // The article element contains ${age} in its text
-                let article_elements = item_doc.select(&element_def.selector);
-                for article in article_elements.nodes() {
-                    self.render_single_element(article, &item_element_def, *item)?;
-                }
+                // Note: Due to dom_query limitations with CSS selectors on cloned documents,
+                // we use manual HTML reconstruction instead of DOM manipulation
+
+                // Note: We don't process the array element itself with properties
+                // as it's just a container for the array items
 
                 // Also process any text nodes with variables that don't have itemprop
                 // This handles cases like <p>Age: ${age}</p>
                 self.process_variables_in_dom(&item_doc, &item_root, *item)?;
 
-                // Append the fully rendered item HTML to the parent
-                let rendered_html = item_root.html();
+                // Process nested array elements within this item
+                // Find any array elements inside this item and render them recursively
+                // BUT skip the current array type to avoid infinite recursion
+                for nested_element_def in &self.template.elements {
+                    if nested_element_def.is_array && nested_element_def.selector != element_def.selector {
+                        // Look for this array element within the current item
+                        let nested_elements = item_root.select(&nested_element_def.selector);
+                        if !nested_elements.is_empty() {
+                            
+                            // Extract the array data from the current item's data context
+                            // The nested array should use the array property from the current item
+                            let nested_array_property = &nested_element_def.properties[0].name;
+                            let nested_data = if let Some(array_data) = item.get_value(&[nested_array_property.clone()]) {
+                                array_data
+                            } else {
+                                // Fallback to current item data if nested array not found
+                                *item
+                            };
+                            
+                            self.render_array_element(&nested_elements, nested_element_def, nested_data)?;
+                        }
+                    }
+                }
+
+                // Instead of relying on DOM modifications persisting, rebuild the HTML manually
+                // This is a workaround for dom_query limitations with cloned documents
+                let rendered_html = self.render_array_item_html(&template_html, *item, &element_def.properties[0].name)?;
                 parent_node.append_html(rendered_html);
             }
 
@@ -613,17 +756,6 @@ impl<'a> Renderer<'a> {
         result
     }
 
-    /// Perform CSS selector query with optional caching
-    fn cached_select<'s>(
-        &self,
-        root: &'s Selection,
-        selector: &str,
-        _use_cache: bool,
-    ) -> Selection<'s> {
-        // Note: Caching disabled for now due to lifetime complexity
-        // TODO: Implement proper selector result caching
-        root.select(selector)
-    }
 }
 
 #[cfg(test)]
@@ -784,6 +916,7 @@ mod tests {
         "#;
 
         let template = create_test_template(html);
+        
         let handlers = std::collections::HashMap::new();
         let renderer = Renderer::new(&template, &handlers);
 

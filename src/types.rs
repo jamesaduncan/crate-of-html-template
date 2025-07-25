@@ -202,8 +202,11 @@ impl HtmlTemplate {
         element: &dom_query::Node,
         config: TemplateConfig,
     ) -> Result<Self> {
-        let html = element.html().to_string();
-        Self::from_str_with_config(&html, None, config)
+        // When creating from element, wrap it in a template tag to ensure proper parsing
+        let html = format!("<template>{}</template>", element.html());
+        // Use the element's tag name as selector to extract just this element
+        let selector = element.node_name().map(|n| n.to_string());
+        Self::from_str_with_config(&html, selector.as_deref(), config)
     }
 
     /// Create a template from a file path
@@ -486,7 +489,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore] // TODO: Fix template structure for from_element tests
     fn test_from_element() {
         let html = r#"<div itemprop="message"></div>"#;
 
@@ -504,7 +506,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore] // TODO: Fix template structure for from_element tests
     fn test_from_element_with_config() {
         let html = r#"<div itemprop="test"></div>"#;
 

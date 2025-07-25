@@ -5,7 +5,6 @@
 
 use std::collections::HashMap;
 use std::path::Path;
-use std::time::Duration;
 
 use crate::cache::TemplateCache;
 use crate::error::{Error, Result};
@@ -374,6 +373,7 @@ pub struct RenderResult {
 mod tests {
     use super::*;
     use serde_json::json;
+    use std::time::Duration;
 
     #[test]
     fn test_builder_basic_usage() {

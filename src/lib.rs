@@ -334,18 +334,27 @@ mod lib_tests {
                 </div>
             </template>
         "#;
-        
+
         let data = json!({
             "name": "Alice",
             "age": 30,
             "status": "active"
         });
-        
+
         let result = render_string_with_selector(html, "div", &data).unwrap();
         // This feature is not yet implemented - variables in non-itemprop elements don't get interpolated
-        assert!(result.contains("${name}"), "Variables not interpolated in non-itemprop elements");
-        assert!(result.contains("${age}"), "Variables not interpolated in non-itemprop elements");
-        assert!(result.contains("${status}"), "Variables not interpolated in non-itemprop elements");
+        assert!(
+            result.contains("${name}"),
+            "Variables not interpolated in non-itemprop elements"
+        );
+        assert!(
+            result.contains("${age}"),
+            "Variables not interpolated in non-itemprop elements"
+        );
+        assert!(
+            result.contains("${status}"),
+            "Variables not interpolated in non-itemprop elements"
+        );
     }
 
     #[test]

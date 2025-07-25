@@ -226,7 +226,6 @@ pub fn escape_html_cow(input: &str) -> Cow<str> {
 }
 
 // Thread-local storage for reusable buffers
-#[allow(unused_doc_comments)]
 thread_local! {
     static STRING_POOL: std::cell::RefCell<StringPool> = std::cell::RefCell::new(
         StringPool::new(10, 50)

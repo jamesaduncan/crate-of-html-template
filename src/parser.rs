@@ -7,7 +7,7 @@ use crate::node_ext::NodeExt;
 use crate::types::*;
 use crate::utils::split_path_cow;
 
-static VARIABLE_REGEX: Lazy<Regex> =
+pub static VARIABLE_REGEX: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"\$\{([^}]+)\}").expect("Invalid variable regex"));
 
 static ESCAPED_VARIABLE_REGEX: Lazy<Regex> =
@@ -135,7 +135,7 @@ impl Parser {
         };
 
         // Parse properties from this element
-        let properties = self.parse_properties(element, &clean_name)?;
+        let properties = self.parse_properties(element, &clean_name, is_array)?;
 
         // Check for itemscope
         let is_scope = element.has_attr("itemscope");
@@ -163,16 +163,19 @@ impl Parser {
         &self,
         element: &dom_query::Node,
         prop_name: &str,
+        is_array: bool,
     ) -> Result<Vec<Property>> {
         let mut properties = Vec::new();
 
         // Check text content for variables or binding
         let text = element.text_content();
         let text_variables = self.extract_variables(&text);
+        let has_variables = !text_variables.is_empty();
 
-        // Always create a text content property for elements with itemprop
-        // This allows binding data to the element even without explicit ${} syntax
-        if !text_variables.is_empty() || !text.trim().is_empty() || properties.is_empty() {
+        // Create a text content property for elements with itemprop
+        // For array elements, only create text content property if there are explicit variables
+        if (!is_array && (has_variables || !text.trim().is_empty() || properties.is_empty())) || 
+           (is_array && has_variables) {
             properties.push(Property {
                 name: prop_name.to_string(),
                 is_array: false,
@@ -229,16 +232,30 @@ impl Parser {
         }
 
         // Ensure we always have at least one property for elements with itemprop
+        // For array elements, we need at least one property to get the array property name
+        // but we don't want a text content property that would interfere with rendering
         if properties.is_empty() {
-            properties.push(Property {
-                name: prop_name.to_string(),
-                is_array: false,
-                target: PropertyTarget::TextContent,
-                variables: vec![Variable {
-                    path: vec![prop_name.to_string()],
-                    raw: format!("${{{}}}", prop_name),
-                }],
-            });
+            if is_array {
+                // For array elements, create a minimal property just for the array name
+                // without text content binding
+                properties.push(Property {
+                    name: prop_name.to_string(),
+                    is_array: false,
+                    target: PropertyTarget::TextContent,
+                    variables: vec![], // No variables - this won't be rendered
+                });
+            } else {
+                // For non-array elements, create the implicit binding
+                properties.push(Property {
+                    name: prop_name.to_string(),
+                    is_array: false,
+                    target: PropertyTarget::TextContent,
+                    variables: vec![Variable {
+                        path: vec![prop_name.to_string()],
+                        raw: format!("${{{}}}", prop_name),
+                    }],
+                });
+            }
         }
 
         Ok(properties)
@@ -248,12 +265,12 @@ impl Parser {
         // First, temporarily replace escaped variables with placeholders to avoid false matches
         let mut working_text = text.to_string();
         let escaped_vars: Vec<_> = ESCAPED_VARIABLE_REGEX.captures_iter(text).collect();
-        
+
         for (i, cap) in escaped_vars.iter().enumerate() {
             let placeholder = format!("__ESCAPED_VAR_{}__", i);
             working_text = working_text.replace(&cap[0], &placeholder);
         }
-        
+
         // Now extract regular variables from the text with escaped vars replaced
         VARIABLE_REGEX
             .captures_iter(&working_text)
