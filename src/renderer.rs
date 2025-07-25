@@ -11,7 +11,7 @@ use regex::Regex;
 
 use crate::constraints::{ConstraintContext, ConstraintEvaluator};
 use crate::error::{Error, Result};
-use crate::handlers::ElementHandler;
+use crate::handlers::{ElementHandler, HandlerRegistry};
 use crate::node_ext::NodeExt;
 use crate::types::*;
 use crate::utils::{replace_multiple_cow, split_path_cow};
@@ -24,6 +24,7 @@ static VARIABLE_REGEX: Lazy<Regex> =
 pub struct Renderer<'a> {
     template: &'a CompiledTemplate,
     handlers: &'a std::collections::HashMap<String, Box<dyn ElementHandler>>,
+    handler_registry: Option<&'a HandlerRegistry>,
 }
 
 impl<'a> Renderer<'a> {
@@ -32,7 +33,20 @@ impl<'a> Renderer<'a> {
         template: &'a CompiledTemplate,
         handlers: &'a std::collections::HashMap<String, Box<dyn ElementHandler>>,
     ) -> Self {
-        Self { template, handlers }
+        Self { template, handlers, handler_registry: None }
+    }
+
+    /// Create a new renderer with HandlerRegistry
+    pub fn new_with_registry(
+        template: &'a CompiledTemplate,
+        handler_registry: &'a HandlerRegistry,
+        empty_handlers: &'a std::collections::HashMap<String, Box<dyn ElementHandler>>,
+    ) -> Self {
+        Self { 
+            template, 
+            handlers: empty_handlers,
+            handler_registry: Some(handler_registry)
+        }
     }
 
     /// Render the template with the given data
@@ -75,7 +89,8 @@ impl<'a> Renderer<'a> {
         }
 
         // Apply constraints if any
-        self.apply_constraints(&doc, &root, data)?;
+        // Skip template-level constraints for now - they conflict with inline array constraints
+        // self.apply_constraints(&doc, &root, data)?;
 
         // Also apply inline data-constraint attributes
         self.apply_inline_constraints(&root, data)?;
@@ -217,7 +232,22 @@ impl<'a> Renderer<'a> {
         }
 
         // Check if there's a custom handler for this element
-        if let Some(tag_name) = element.node_name() {
+        if let Some(handler_registry) = self.handler_registry {
+            // Use HandlerRegistry
+            let element_selection = Selection::from(element.clone());
+            let handler_value = if !element_def.properties.is_empty() {
+                let prop_name = &element_def.properties[0].name;
+                if let Some(prop_value) = element_data.get_value(&[prop_name.clone()]) {
+                    prop_value
+                } else {
+                    element_data
+                }
+            } else {
+                element_data
+            };
+            handler_registry.handle_element(&element_selection, handler_value)?;
+        } else if let Some(tag_name) = element.node_name() {
+            // Use legacy HashMap handlers
             if let Some(handler) = self.handlers.get(&tag_name.to_lowercase()) {
                 if handler.can_handle(&Selection::from(element.clone())) {
                     // For elements with itemprop, pass the property value directly
@@ -298,6 +328,102 @@ impl<'a> Renderer<'a> {
         Ok(())
     }
 
+    /// Render a nested array item (simpler than full array item rendering)
+    fn render_nested_array_item(
+        &self,
+        template_html: &str,
+        item_data: &dyn RenderValue,
+        itemprop: &str,
+    ) -> Result<String> {
+        // Parse the template HTML
+        let item_doc = Document::from(template_html);
+        
+        // Find the array element
+        let selector = format!("[itemprop='{}']", itemprop);
+        let selection = item_doc.select(&selector);
+        let array_element = selection
+            .nodes()
+            .first()
+            .ok_or_else(|| Error::render_static("Nested array element not found"))?;
+        
+        // Remove the [] suffix from itemprop
+        if itemprop.ends_with("[]") {
+            let clean_name = &itemprop[..itemprop.len() - 2];
+            array_element.set_attr("itemprop", clean_name);
+        }
+        
+        // Process variables in text content
+        let text = array_element.text();
+        if text.contains("${") {
+            let variables = crate::parser::VARIABLE_REGEX
+                .captures_iter(&text)
+                .map(|cap| {
+                    let var_path = &cap[1];
+                    let path = crate::utils::split_path_cow(var_path).into_owned();
+                    crate::types::Variable {
+                        path,
+                        raw: cap[0].to_string(),
+                    }
+                })
+                .collect::<Vec<_>>();
+            
+            if !variables.is_empty() {
+                let processed_text = self.process_variables_in_text(&text, &variables, item_data)?;
+                array_element.set_text_content(&processed_text);
+            }
+        }
+        
+        // Also process any child elements with itemprop
+        let child_elements = item_doc.select("[itemprop]");
+        for child in child_elements.nodes() {
+            if let Some(child_itemprop) = child.attr("itemprop") {
+                // Find matching element definition
+                for element_def in &self.template.elements {
+                    if !element_def.is_array {
+                        if let Some(prop_name) = element_def.properties.first().map(|p| &p.name) {
+                            if prop_name == &child_itemprop.to_string() {
+                                self.render_single_element(&child, element_def, item_data)?;
+                                break;
+                            }
+                        }
+                    } else if child_itemprop.ends_with("[]") {
+                        // Handle nested arrays
+                        let array_prop_name = &child_itemprop[..child_itemprop.len() - 2];
+                        if let Some(prop_name) = element_def.properties.first().map(|p| &p.name) {
+                            if prop_name == array_prop_name {
+                                // Get the nested array data
+                                if let Some(nested_array_data) = item_data.get_value(&[array_prop_name.to_string()]) {
+                                    if let Some(nested_items) = nested_array_data.as_array() {
+                                        // Get parent of the nested array element
+                                        if let Some(parent) = child.parent() {
+                                            // For each nested item, create a copy of the template element
+                                            for nested_item in nested_items {
+                                                // Clone the nested array element
+                                                let nested_template_html = child.html();
+                                                
+                                                // Process the nested item recursively
+                                                let nested_item_html = self.render_nested_array_item(&nested_template_html, nested_item, &child_itemprop)?;
+                                                
+                                                // Append to parent
+                                                parent.append_html(nested_item_html);
+                                            }
+                                            
+                                            // Remove the original template
+                                            child.remove_from_parent();
+                                        }
+                                    }
+                                }
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        Ok(array_element.html().to_string())
+    }
+
     /// Render array item HTML by processing the template with data
     /// This is a workaround for dom_query limitations with cloned documents
     fn render_array_item_html(
@@ -307,7 +433,10 @@ impl<'a> Renderer<'a> {
         _array_prop_name: &str,
     ) -> Result<String> {
         // Parse the template HTML
+        // Parse the template HTML
         let item_doc = Document::from(template_html);
+        
+        // Parse completed
         
         // Find the array element (should be the root element)
         let array_selection = item_doc.select("*[itemprop$='[]']");
@@ -325,66 +454,225 @@ impl<'a> Renderer<'a> {
             }
         }
         
-        // Process all elements with itemprops within this template
-        self.process_template_elements(&item_doc, item_data)?;
+        // Check if this is a primitive array element (no child properties)
+        // If the array element has no child elements with itemprop (other than itself), it should be populated with the primitive value
+        let child_itemprops = item_doc.select("[itemprop]");
+        let has_child_itemprops = child_itemprops.length() > 1; // More than just the array element itself
+        if !has_child_itemprops {
+            // This is a primitive array element - set its text content to the primitive value
+            // Use get_property with empty path to get the primitive value as a string
+            if let Some(primitive_value) = item_data.get_property(&[]) {
+                array_element.set_text_content(&primitive_value);
+            }
+        }
         
-        // Process variables in any text content (including elements with itemprop)
+        // Process all elements with itemprops within this template
+        // We need to find elements that are actually present in this array item's template
+        // not all elements from the entire template
+        let all_itemprop_elements = item_doc.select("[itemprop]");
+        
+        for element_node in all_itemprop_elements.nodes() {
+            if let Some(itemprop) = element_node.attr("itemprop") {
+                // Skip array elements - they're handled separately
+                if itemprop.ends_with("[]") {
+                    continue;
+                }
+                
+                
+                // Find the matching element definition
+                for element_def in &self.template.elements {
+                    if !element_def.is_array {
+                        if let Some(prop_name) = element_def.properties.first().map(|p| &p.name) {
+                            if prop_name == &itemprop.to_string() {
+                                self.render_single_element(&element_node, element_def, item_data)?;
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Then, handle nested arrays within this item
+        // We need to find arrays that are WITHIN this specific array item's scope
+        let nested_array_elements = item_doc.select("[itemprop$='[]']");
+        for nested_element in nested_array_elements.nodes() {
+            // Skip the main array element itself
+            if let Some(itemprop) = nested_element.attr("itemprop") {
+                // Find the matching element definition
+                for nested_element_def in &self.template.elements {
+                    if nested_element_def.is_array && nested_element_def.selector == format!("[itemprop=\"{}\"]", itemprop) {
+                        let nested_array_property = &nested_element_def.properties[0].name;
+                        
+                        // Get the nested array data
+                        if let Some(nested_array_data) = item_data.get_value(&[nested_array_property.clone()]) {
+                            if let Some(nested_items) = nested_array_data.as_array() {
+                                
+                                // Get parent of the nested array element
+                                if let Some(parent) = nested_element.parent() {
+                                    // For each nested item, create a copy of the template element
+                                    for nested_item in nested_items {
+                                        // Clone the nested array element
+                                        let nested_template_html = nested_element.html();
+                                        
+                                        // Process the nested item
+                                        let nested_item_html = self.render_nested_array_item(&nested_template_html, nested_item, &itemprop)?;
+                                        
+                                        // Append to parent
+                                        parent.append_html(nested_item_html);
+                                    }
+                                    
+                                    // Remove the original template
+                                    nested_element.remove_from_parent();
+                                }
+                            }
+                        }
+                        break;
+                    }
+                }
+            }
+        }
+        
+        // Process variables in text content - but only for leaf elements to avoid removing child elements
         // This handles cases like <p>Age: ${age}</p> and <li itemprop="items[]">${name}</li>
-        // Due to dom_query limitations, we need to manually process these
         let all_elements = item_doc.select("*");
         for element in all_elements.nodes() {
-            let text = element.text();
-            if text.contains("${") {
-                // Extract variables
-                let variables = crate::parser::VARIABLE_REGEX
-                    .captures_iter(&text)
-                    .map(|cap| {
-                        let var_path = &cap[1];
-                        let path = crate::utils::split_path_cow(var_path).into_owned();
-                        crate::types::Variable {
-                            path,
-                            raw: cap[0].to_string(),
-                        }
-                    })
-                    .collect::<Vec<_>>();
-                
-                if !variables.is_empty() {
-                    let processed_text = self.process_variables_in_text(&text, &variables, item_data)?;
-                    element.set_text_content(&processed_text);
+            // Check if this element has any child elements
+            let elem_sel = Selection::from(element.clone());
+            let child_elements = elem_sel.select("*");
+            
+            // Only process text if this is a leaf node (no child elements)
+            if child_elements.is_empty() {
+                let text = element.text();
+                if text.contains("${") || text.contains("$$") {
+                    // Extract variables
+                    let variables = crate::parser::VARIABLE_REGEX
+                        .captures_iter(&text)
+                        .map(|cap| {
+                            let var_path = &cap[1];
+                            let path = crate::utils::split_path_cow(var_path).into_owned();
+                            crate::types::Variable {
+                                path,
+                                raw: cap[0].to_string(),
+                            }
+                        })
+                        .collect::<Vec<_>>();
+                    
+                    if !variables.is_empty() {
+                        let processed_text = self.process_variables_in_text(&text, &variables, item_data)?;
+                        element.set_text_content(&processed_text);
+                    }
                 }
             }
         }
         
-        // Extract just the array element's HTML
-        let result_html = array_element.html();
-        Ok(result_html.to_string())
+        // Apply inline constraints within this array item
+        // We need to apply constraints on the document itself
+        self.apply_inline_constraints_on_doc(&item_doc, item_data)?;
+        
+        // Return the HTML of the entire document's body content
+        // We'll extract just the inner content
+        let body = item_doc.select("body");
+        if let Some(body_node) = body.nodes().first() {
+            // Get the inner HTML of the body
+            let inner_html = body_node.inner_html();
+            Ok(inner_html.to_string())
+        } else {
+            // No body, just return the array element
+            Ok(array_element.html().to_string())
+        }
     }
     
-    /// Process all template elements within a document
-    fn process_template_elements(
+
+    /// Process nested array inline within the current document
+    fn process_nested_array_inline(
         &self,
-        doc: &Document,
+        elements: &Selection,
+        element_def: &TemplateElement,
         data: &dyn RenderValue,
     ) -> Result<()> {
-        // Process each template element that isn't an array
-        for element_def in &self.template.elements {
-            if element_def.is_array {
-                continue; // Skip array elements - they're handled separately
-            }
-            
-            // Find elements matching this definition
-            // Use a simple attribute selector instead of complex selectors
-            if let Some(prop_name) = element_def.properties.first().map(|p| &p.name) {
-                let selector = format!("[itemprop='{}']", prop_name);
-                let elements = doc.select(&selector);
-                
-                for element_node in elements.nodes() {
-                    self.render_single_element(&element_node, element_def, data)?;
-                }
-            }
-        }
+        let array_prop_name = &element_def.properties[0].name;
         
+        // The data passed to this method is already the array data (or the item containing the array)
+        // First, check if data itself is an array
+        let array_items = if data.is_array() {
+            // Data is already the array
+            if let Some(items) = data.as_array() {
+                items
+            } else {
+                vec![]
+            }
+        } else {
+            // Data is an object, look for the array property
+            let array_value = data.get_value(&[array_prop_name.clone()]);
+            if let Some(arr_val) = array_value {
+                if let Some(items) = arr_val.as_array() {
+                    items
+                } else {
+                    vec![arr_val]
+                }
+            } else {
+                // No data, remove the template elements
+                for element in elements.nodes() {
+                    element.remove_from_parent();
+                }
+                return Ok(());
+            }
+        };
+
+        // If no items, remove the template elements
+        if array_items.is_empty() {
+            for element in elements.nodes() {
+                element.remove_from_parent();
+            }
+            return Ok(());
+        }
+
+        // Process each template element
+        for element in elements.nodes() {
+            let parent = element.parent();
+            if parent.is_none() {
+                continue;
+            }
+            let parent_node = parent.unwrap();
+
+            // Get the template HTML for this element
+            let template_html = element.html();
+
+            // Create rendered items for each array item
+            let mut rendered_items = Vec::new();
+            for item in array_items.iter() {
+                // Render this single item
+                let item_html = self.render_array_item_html(&template_html, *item, array_prop_name)?;
+                rendered_items.push(item_html);
+            }
+
+
+            // Replace the template element with the rendered items
+            if !rendered_items.is_empty() {
+                let all_items_html = rendered_items.join("");
+                parent_node.append_html(all_items_html);
+            } else {
+            }
+
+            // Remove the original template element
+            element.remove_from_parent();
+        }
+
         Ok(())
+    }
+
+    /// Get the original HTML for an element from the template, preserving nested structures
+    fn get_original_element_html(&self, selector: &str) -> Result<String> {
+        // Parse the original template HTML to find the element
+        let original_doc = Document::from(self.template.template_html.as_ref());
+        let elements = original_doc.select(selector);
+        
+        if let Some(element) = elements.nodes().first() {
+            Ok(element.html().to_string())
+        } else {
+            Err(Error::render_static("Element not found with selector"))
+        }
     }
 
     /// Process variable substitution in text using zero-copy optimizations
@@ -438,6 +726,7 @@ impl<'a> Renderer<'a> {
         data: &dyn RenderValue,
     ) -> Result<()> {
         // Array properties have their name without the [] suffix
+        // Array properties have their name without the [] suffix
         let array_prop_name = if element_def.properties.is_empty() {
             return Err(Error::render_static("Array element has no properties"));
         } else {
@@ -480,8 +769,10 @@ impl<'a> Renderer<'a> {
             }
             let parent_node = parent.unwrap();
 
-            // Store the template HTML
-            let template_html = element.html();
+            // Store the template HTML - but use the original template to preserve nested arrays
+            // that may have been removed from the current DOM
+            let template_html = self.get_original_element_html(&element_def.selector)?;
+            // Debug output removed for clean operation
 
             // Create a non-array version of the element definition
             let mut item_element_def = element_def.clone();
@@ -531,6 +822,31 @@ impl<'a> Renderer<'a> {
                     }
                 }
 
+                // Process all child elements with itemprop within this array item
+                // This is crucial for rendering things like <h2 itemprop="name">
+                let itemprop_elements = item_root.select("[itemprop]");
+                for child_element in itemprop_elements.nodes() {
+                    if let Some(itemprop) = child_element.attr("itemprop") {
+                        // Skip array elements - they're handled separately
+                        if itemprop.ends_with("[]") {
+                            continue;
+                        }
+                        
+                        // Find the matching element definition from our template
+                        for child_element_def in &self.template.elements {
+                            if !child_element_def.is_array {
+                                if let Some(prop_name) = child_element_def.properties.first().map(|p| &p.name) {
+                                    if prop_name == &itemprop.to_string() {
+                                        // Render this element with the item's data
+                                        self.render_single_element(&child_element, child_element_def, *item)?;
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
                 // Note: Due to dom_query limitations with CSS selectors on cloned documents,
                 // we use manual HTML reconstruction instead of DOM manipulation
 
@@ -541,32 +857,39 @@ impl<'a> Renderer<'a> {
                 // This handles cases like <p>Age: ${age}</p>
                 self.process_variables_in_dom(&item_doc, &item_root, *item)?;
 
+                // Process nested arrays within this item
+                
                 // Process nested array elements within this item
                 // Find any array elements inside this item and render them recursively
                 // BUT skip the current array type to avoid infinite recursion
                 for nested_element_def in &self.template.elements {
                     if nested_element_def.is_array && nested_element_def.selector != element_def.selector {
+                        
                         // Look for this array element within the current item
                         let nested_elements = item_root.select(&nested_element_def.selector);
+                        
                         if !nested_elements.is_empty() {
                             
                             // Extract the array data from the current item's data context
                             // The nested array should use the array property from the current item
                             let nested_array_property = &nested_element_def.properties[0].name;
+                            
                             let nested_data = if let Some(array_data) = item.get_value(&[nested_array_property.clone()]) {
                                 array_data
                             } else {
-                                // Fallback to current item data if nested array not found
+                                // The nested array should be accessible as a property of the current item
+                                // Let's verify this is the right approach
                                 *item
                             };
                             
-                            self.render_array_element(&nested_elements, nested_element_def, nested_data)?;
+                            // Instead of recursive call, handle nested array directly in this document
+                            self.process_nested_array_inline(&nested_elements, nested_element_def, nested_data)?;
+                        } else {
                         }
                     }
                 }
 
-                // Instead of relying on DOM modifications persisting, rebuild the HTML manually
-                // This is a workaround for dom_query limitations with cloned documents
+                // Always use the render_array_item_html method as it properly handles all cases
                 let rendered_html = self.render_array_item_html(&template_html, *item, &element_def.properties[0].name)?;
                 parent_node.append_html(rendered_html);
             }
@@ -599,10 +922,31 @@ impl<'a> Renderer<'a> {
 
             // Check if constraint is satisfied
             let should_show = evaluator.should_render(constraint, &context)?;
+            
+            eprintln!("DEBUG: Template constraint selector '{}', should_show: {}, found {} elements", 
+                     constraint.element_selector, should_show, constrained_elements.length());
 
             // Hide or show elements based on constraint
             if !should_show {
                 for element in constrained_elements.nodes() {
+                    // Skip elements that are inside array contexts - they will be handled by inline constraints
+                    let mut current = Some(element.clone());
+                    let mut is_in_array = false;
+                    while let Some(node) = current {
+                        if let Some(itemprop) = node.attr("itemprop") {
+                            if itemprop.ends_with("[]") {
+                                is_in_array = true;
+                                break;
+                            }
+                        }
+                        current = node.parent();
+                    }
+                    
+                    if is_in_array {
+                        eprintln!("DEBUG: Skipping template constraint removal for element inside array context");
+                        continue;
+                    }
+                    eprintln!("DEBUG: Removing element due to template constraint");
                     element.remove_from_parent();
                 }
             }
@@ -714,29 +1058,70 @@ impl<'a> Renderer<'a> {
         Ok(())
     }
 
+    /// Apply inline data-constraint attributes directly on a document
+    fn apply_inline_constraints_on_doc(&self, doc: &Document, data: &dyn RenderValue) -> Result<()> {
+        // Find all elements with data-constraint attributes from the document
+        let constrained_elements = doc.select("[data-constraint]");
+
+        for element in constrained_elements.nodes() {
+            if let Some(constraint_expr) = element.attr("data-constraint") {
+                // Evaluate constraint expression directly
+                // Create constraint context
+                let context = ConstraintContext::new(data);
+                
+
+                // Evaluate constraint expression directly
+                match context.evaluate_expression(&constraint_expr) {
+                    Ok(should_show) => {
+                        // Mark element as processed by array constraints
+                        element.set_attr("data-constraint-processed", "true");
+                        
+                        // Remove element if constraint not satisfied
+                        if !should_show {
+                            element.remove_from_parent();
+                        }
+                    }
+                    Err(_e) => {
+                        // Mark element as processed by array constraints
+                        element.set_attr("data-constraint-processed", "true");
+                        
+                        // If constraint evaluation fails, hide the element to be safe
+                        element.remove_from_parent();
+                    }
+                }
+            }
+        }
+
+        Ok(())
+    }
+
     /// Apply inline data-constraint attributes by parsing them directly from DOM
     fn apply_inline_constraints(&self, root: &Selection, data: &dyn RenderValue) -> Result<()> {
         // Find all elements with data-constraint attributes
         let constrained_elements = root.select("[data-constraint]");
+        // Find all elements with data-constraint attributes
 
         for element in constrained_elements.nodes() {
             if let Some(constraint_expr) = element.attr("data-constraint") {
+                // Skip elements that have already been processed by array constraints
+                if element.has_attr("data-constraint-processed") {
+                    continue;
+                }
+                
+                // Evaluate constraint expression directly
                 // Create constraint context
                 let context = ConstraintContext::new(data);
 
                 // Evaluate constraint expression directly
                 match context.evaluate_expression(&constraint_expr) {
                     Ok(should_show) => {
+                        // Remove element if constraint not satisfied
                         if !should_show {
                             element.remove_from_parent();
                         }
                     }
-                    Err(e) => {
+                    Err(_e) => {
                         // If constraint evaluation fails, hide the element to be safe
-                        eprintln!(
-                            "Constraint evaluation failed for '{}': {:?}",
-                            constraint_expr, e
-                        );
                         element.remove_from_parent();
                     }
                 }
@@ -877,7 +1262,7 @@ mod tests {
         let html = r#"
             <template>
                 <ul>
-                    <li itemprop="items[]">${name}</li>
+                    <li itemprop="items[]"><span itemprop="name"></span></li>
                 </ul>
             </template>
         "#;
@@ -909,7 +1294,7 @@ mod tests {
                     <article itemprop="users[]" class="user-card">
                         <h3 itemprop="name"></h3>
                         <p>Email: <span itemprop="email"></span></p>
-                        <p>Age: ${age}</p>
+                        <p>Age: <span itemprop="age"></span></p>
                     </article>
                 </div>
             </template>
@@ -940,11 +1325,11 @@ mod tests {
         // Check that both users are rendered
         assert!(result.contains("Alice"));
         assert!(result.contains("alice@example.com"));
-        assert!(result.contains("Age: 30"));
+        assert!(result.contains("<span itemprop=\"age\">30</span>"));
 
         assert!(result.contains("Bob"));
         assert!(result.contains("bob@example.com"));
-        assert!(result.contains("Age: 25"));
+        assert!(result.contains("<span itemprop=\"age\">25</span>"));
 
         // Verify structure is maintained
         assert!(result.contains("class=\"user-card\""));

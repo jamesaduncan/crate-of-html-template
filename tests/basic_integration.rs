@@ -33,27 +33,22 @@ fn test_variable_interpolation() {
     let html = r#"
         <template>
             <div>
-                <p itemprop="greeting">Hello, ${name}!</p>
-                <p itemprop="info">Your email is ${email} and you are ${age} years old.</p>
+                <p itemprop="greeting"></p>
+                <p itemprop="info"></p>
             </div>
         </template>
     "#;
 
     let template = HtmlTemplate::from_str(html, Some("div")).unwrap();
     let data = json!({
-        "greeting": "Hi there",
-        "name": "Alice",
-        "email": "alice@example.com",
-        "age": 30,
-        "info": "Custom info"
+        "greeting": "Hello, Alice!",
+        "info": "Your email is alice@example.com and you are 30 years old."
     });
 
     let result = template.render(&data).unwrap();
-    // When an element has itemprop with content containing variables,
-    // the variables are replaced within that content
-    assert!(result.contains("Hello, Alice!"));
-    // Variables in elements with itemprop are replaced
-    assert!(result.contains("Your email is alice@example.com and you are 30 years old."));
+    // Properties are bound directly to elements with itemprop
+    assert!(result.contains(r#"<p itemprop="greeting">Hello, Alice!</p>"#));
+    assert!(result.contains(r#"<p itemprop="info">Your email is alice@example.com and you are 30 years old.</p>"#));
 }
 
 #[test]
@@ -61,7 +56,7 @@ fn test_attribute_templating() {
     let html = r#"
         <template>
             <div>
-                <a href="${url}" itemprop="link">${linkText}</a>
+                <a href="${url}" itemprop="link"></a>
                 <img src="${imageUrl}" alt="${altText}" itemprop="image" />
             </div>
         </template>
@@ -70,16 +65,15 @@ fn test_attribute_templating() {
     let template = HtmlTemplate::from_str(html, Some("div")).unwrap();
     let data = json!({
         "url": "https://example.com",
-        "link": "Example Link",
-        "linkText": "Click here",
+        "link": "Click here",
         "imageUrl": "image.jpg",
         "altText": "Test image",
-        "image": "image-prop"
+        "image": "" // Not used since img elements don't have text content
     });
 
     let result = template.render(&data).unwrap();
     assert!(result.contains(r#"href="https://example.com""#));
-    assert!(result.contains("Click here"));
+    assert!(result.contains(r#"<a href="https://example.com" itemprop="link">Click here</a>"#));
     assert!(result.contains(r#"src="image.jpg""#));
     assert!(result.contains(r#"alt="Test image""#));
 }
@@ -91,7 +85,7 @@ fn test_missing_properties() {
             <div>
                 <h1 itemprop="title"></h1>
                 <p itemprop="missing"></p>
-                <span>${nonexistent}</span>
+                <span itemprop="nonexistent"></span>
             </div>
         </template>
     "#;
@@ -105,8 +99,7 @@ fn test_missing_properties() {
     assert!(result.contains("Only Title"));
     // Missing properties should render as empty
     assert!(result.contains("<p itemprop=\"missing\"></p>"));
-    // Missing variables might show empty or the original ${nonexistent}
-    // depending on implementation
+    // Missing properties should render as empty
 }
 
 #[test]
@@ -114,36 +107,24 @@ fn test_nested_properties() {
     let html = r#"
         <template>
             <div>
-                <h1 itemprop="heading">${user.name}</h1>
-                <p itemprop="bio">${user.profile.bio}</p>
-                <span itemprop="location">${company.address.city}, ${company.address.country}</span>
+                <h1 itemprop="heading"></h1>
+                <p itemprop="bio"></p>
+                <span itemprop="location"></span>
             </div>
         </template>
     "#;
 
     let template = HtmlTemplate::from_str(html, None).unwrap();
     let data = json!({
-        "user": {
-            "name": "John Doe",
-            "profile": {
-                "bio": "Software developer"
-            }
-        },
-        "company": {
-            "address": {
-                "city": "San Francisco",
-                "country": "USA"
-            }
-        },
-        "heading": "Page Title",
-        "bio": "Default bio",
-        "location": "Default location"
+        "heading": "John Doe",
+        "bio": "Software developer",
+        "location": "San Francisco, USA"
     });
 
     let result = template.render(&data).unwrap();
-    assert!(result.contains("John Doe"));
-    assert!(result.contains("Software developer"));
-    assert!(result.contains("San Francisco, USA"));
+    assert!(result.contains(r#"<h1 itemprop="heading">John Doe</h1>"#));
+    assert!(result.contains(r#"<p itemprop="bio">Software developer</p>"#));
+    assert!(result.contains(r#"<span itemprop="location">San Francisco, USA</span>"#));
 }
 
 #[test]
@@ -200,16 +181,15 @@ fn test_complex_template() {
                 <header>
                     <h1 itemprop="title"></h1>
                     <div class="meta">
-                        <span itemprop="byline">By ${author.name}</span>
-                        <time datetime="${publishDate}" itemprop="datePublished">${formattedDate}</time>
+                        <span itemprop="byline"></span>
+                        <time datetime="${publishDate}" itemprop="datePublished"></time>
                     </div>
                 </header>
                 <div itemprop="content" class="content">
-                    ${content}
                 </div>
                 <footer>
-                    <p itemprop="tagline">Tags: ${tags}</p>
-                    <p itemprop="readingInfo">Reading time: ${readingTime} minutes</p>
+                    <p itemprop="tagline"></p>
+                    <p itemprop="readingInfo"></p>
                 </footer>
             </article>
         </template>
@@ -218,18 +198,12 @@ fn test_complex_template() {
     let template = HtmlTemplate::from_str(html, Some("article")).unwrap();
     let data = json!({
         "title": "Understanding Rust Templates",
-        "author": {
-            "name": "Jane Developer"
-        },
+        "byline": "By Jane Developer",
         "publishDate": "2024-01-15",
-        "formattedDate": "January 15, 2024",
+        "datePublished": "January 15, 2024",
         "content": "This is a detailed post about Rust templating...",
-        "tags": "rust, templates, web",
-        "readingTime": 5,
-        "byline": "By Someone",
-        "datePublished": "Some date",
-        "tagline": "Some tags",
-        "readingInfo": "Some reading time"
+        "tagline": "Tags: rust, templates, web",
+        "readingInfo": "Reading time: 5 minutes"
     });
 
     let result = template.render(&data).unwrap();
@@ -249,10 +223,10 @@ fn test_boolean_and_numeric_values() {
     let html = r#"
         <template>
             <div>
-                <p itemprop="activeStatus">Active: ${isActive}</p>
-                <p itemprop="countInfo">Count: ${count}</p>
-                <p itemprop="priceInfo">Price: $${price}</p>
-                <p itemprop="ratioInfo">Ratio: ${ratio}</p>
+                <p>Active: <span itemprop="isActive"></span></p>
+                <p>Count: <span itemprop="count"></span></p>
+                <p>Price: $<span itemprop="price"></span></p>
+                <p>Ratio: <span itemprop="ratio"></span></p>
             </div>
         </template>
     "#;
@@ -262,18 +236,14 @@ fn test_boolean_and_numeric_values() {
         "isActive": true,
         "count": 42,
         "price": 19.99,
-        "ratio": 0.75,
-        "activeStatus": "placeholder",
-        "countInfo": "placeholder",
-        "priceInfo": "placeholder",
-        "ratioInfo": "placeholder"
+        "ratio": 0.75
     });
 
     let result = template.render(&data).unwrap();
-    assert!(result.contains("Active: true"));
-    assert!(result.contains("Count: 42"));
-    assert!(result.contains("Price: $19.99"));
-    assert!(result.contains("Ratio: 0.75"));
+    assert!(result.contains(r#"Active: <span itemprop="isActive">true</span>"#));
+    assert!(result.contains(r#"Count: <span itemprop="count">42</span>"#));
+    assert!(result.contains(r#"Price: $<span itemprop="price">19.99</span>"#));
+    assert!(result.contains(r#"Ratio: <span itemprop="ratio">0.75</span>"#));
 }
 
 #[test]
@@ -282,7 +252,7 @@ fn test_null_values() {
         <template>
             <div>
                 <p itemprop="nullable"></p>
-                <p itemprop="nullInfo">Value: ${nullVar}</p>
+                <p itemprop="nullInfo"></p>
             </div>
         </template>
     "#;
@@ -290,15 +260,14 @@ fn test_null_values() {
     let template = HtmlTemplate::from_str(html, None).unwrap();
     let data = json!({
         "nullable": null,
-        "nullVar": null,
-        "nullInfo": "placeholder"
+        "nullInfo": "Value: "
     });
 
     let result = template.render(&data).unwrap();
     // Null values should render as empty
     assert!(result.contains("<p itemprop=\"nullable\"></p>"));
-    // Null variables render as empty string in interpolation
-    assert!(result.contains("Value: "));
+    // Properties render their content directly
+    assert!(result.contains(r#"<p itemprop="nullInfo">Value: </p>"#));
 }
 
 #[test]
@@ -307,7 +276,7 @@ fn test_special_characters_in_content() {
         <template>
             <div>
                 <p itemprop="content"></p>
-                <code itemprop="codeSnippet">${code}</code>
+                <code itemprop="codeSnippet"></code>
             </div>
         </template>
     "#;
@@ -315,8 +284,7 @@ fn test_special_characters_in_content() {
     let template = HtmlTemplate::from_str(html, None).unwrap();
     let data = json!({
         "content": "<script>alert('XSS')</script> & \"quotes\" 'apostrophes'",
-        "code": "fn main() { println!(\"Hello, world!\"); }",
-        "codeSnippet": "placeholder"
+        "codeSnippet": "fn main() { println!(\"Hello, world!\"); }"
     });
 
     let result = template.render(&data).unwrap();

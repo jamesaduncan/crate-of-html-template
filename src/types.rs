@@ -32,7 +32,7 @@ use std::sync::Arc;
 
 use crate::cache::{get_global_cache, TemplateCache, TemplateCacheKey};
 use crate::error::{Error, Result};
-use crate::handlers::ElementHandler;
+use crate::handlers::{ElementHandler, HandlerRegistry};
 use crate::value::RenderValue;
 
 /// Main template type for HTML rendering with microdata support
@@ -100,6 +100,7 @@ pub struct HtmlTemplate {
     pub(crate) compiled: Arc<CompiledTemplate>,
     pub(crate) config: TemplateConfig,
     pub(crate) handlers: HashMap<String, Box<dyn ElementHandler>>,
+    pub(crate) handler_registry: Option<HandlerRegistry>,
 }
 
 impl Clone for HtmlTemplate {
@@ -110,6 +111,7 @@ impl Clone for HtmlTemplate {
             // Note: handlers are not cloned as ElementHandler doesn't implement Clone
             // This means cached templates will have empty handlers
             handlers: HashMap::new(),
+            handler_registry: None,
         }
     }
 }
@@ -135,6 +137,21 @@ impl HtmlTemplate {
             compiled,
             config,
             handlers,
+            handler_registry: None,
+        }
+    }
+
+    /// Create a new HtmlTemplate with HandlerRegistry
+    pub fn new_with_registry(
+        compiled: Arc<CompiledTemplate>,
+        config: TemplateConfig,
+        handler_registry: HandlerRegistry,
+    ) -> Self {
+        Self {
+            compiled,
+            config,
+            handlers: HashMap::new(),
+            handler_registry: Some(handler_registry),
         }
     }
 
@@ -255,7 +272,11 @@ impl HtmlTemplate {
 
     /// Render the template with the given data
     pub fn render(&self, data: &dyn RenderValue) -> Result<String> {
-        let renderer = crate::renderer::Renderer::new(&self.compiled, &self.handlers);
+        let renderer = if let Some(ref registry) = self.handler_registry {
+            crate::renderer::Renderer::new_with_registry(&self.compiled, registry, &self.handlers)
+        } else {
+            crate::renderer::Renderer::new(&self.compiled, &self.handlers)
+        };
         renderer.render(data)
     }
 

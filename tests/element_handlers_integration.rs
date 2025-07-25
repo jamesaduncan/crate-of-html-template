@@ -314,9 +314,9 @@ fn test_nested_form_arrays() {
         <template>
             <form>
                 <div itemprop="fields[]" class="field">
-                    <label>${label}</label>
+                    <label itemprop="label"></label>
                     <input type="${type}" name="${name}" itemprop="value" />
-                    <span class="help">${help}</span>
+                    <span class="help" itemprop="help"></span>
                 </div>
             </form>
         </template>

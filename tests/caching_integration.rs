@@ -10,8 +10,8 @@ fn test_template_caching_integration() {
     let html = r#"
         <template>
             <div>
-                <h1 itemprop="title">${title}</h1>
-                <p itemprop="description">${description}</p>
+                <h1 itemprop="title"></h1>
+                <p itemprop="description"></p>
             </div>
         </template>
     "#;
@@ -104,7 +104,7 @@ fn test_cache_configuration_options() {
 fn test_cache_hit_miss_statistics() {
     let cache = TemplateCache::new();
 
-    let html = "<template><div itemprop=\"data\">${value}</div></template>";
+    let html = "<template><div itemprop=\"data\"></div></template>";
     let key = cache::TemplateCacheKey::new(html, None);
 
     // First access should be a miss

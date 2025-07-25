@@ -162,7 +162,6 @@ fn test_nested_object_with_itemscope() {
 }
 
 #[test]
-#[ignore = "Known limitation: dom_query doesn't persist DOM modifications for nested arrays"]
 fn test_nested_arrays() {
     let html = r#"
         <template>
@@ -274,7 +273,7 @@ fn test_array_with_mixed_content() {
 }
 
 #[test]
-#[ignore = "Known limitation: dom_query doesn't persist DOM modifications for nested arrays"]
+#[ignore = "Complex nested arrays with itemscope elements need further investigation"]
 fn test_deeply_nested_structure() {
     let html = r#"
         <template>

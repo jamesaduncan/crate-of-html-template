@@ -204,7 +204,12 @@ impl HtmlTemplateBuilder {
         };
 
         // Add handlers if any were provided
-        if !self.handlers.is_empty() {
+        if let Some(registry) = self.handler_registry {
+            // Use the new constructor with HandlerRegistry
+            let compiled = template.compiled.clone();
+            let config = template.config.clone();
+            Ok(HtmlTemplate::new_with_registry(compiled, config, registry))
+        } else if !self.handlers.is_empty() {
             // Since we can't modify the template after creation, we need to create a new one
             // with the handlers. This is a limitation of the current API design.
             let compiled = template.compiled.clone();

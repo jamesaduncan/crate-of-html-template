@@ -139,12 +139,12 @@ fn test_template_compilation_performance() {
                     </div>
                     <ul>
                         <li itemprop="items[]">
-                            <strong>${name}</strong> - ${value}
+                            <strong itemprop="name"></strong> - <span itemprop="value"></span>
                         </li>
                     </ul>
                 </div>
                 <footer>
-                    <p>Total sections: ${sectionCount}</p>
+                    <p>Total sections: <span itemprop="sectionCount"></span></p>
                 </footer>
             </div>
         </template>
@@ -196,7 +196,7 @@ fn test_repeated_rendering_performance() {
             <div class="item">
                 <h2 itemprop="title"></h2>
                 <p itemprop="description"></p>
-                <span>${timestamp}</span>
+                <span itemprop="timestamp"></span>
             </div>
         </template>
     "#;
@@ -237,9 +237,9 @@ fn test_memory_usage_with_large_templates() {
                 <header>
                     <h1 itemprop="title"></h1>
                     <nav>
-                        <a href="${link1}" itemprop="nav1">${nav1}</a>
-                        <a href="${link2}" itemprop="nav2">${nav2}</a>
-                        <a href="${link3}" itemprop="nav3">${nav3}</a>
+                        <a href="${link1}" itemprop="nav1"></a>
+                        <a href="${link2}" itemprop="nav2"></a>
+                        <a href="${link3}" itemprop="nav3"></a>
                     </nav>
                 </header>
                 
@@ -247,7 +247,7 @@ fn test_memory_usage_with_large_templates() {
                     <article itemprop="articles[]" class="article">
                         <h2 itemprop="headline"></h2>
                         <div class="meta">
-                            <time datetime="${publishDate}" itemprop="datePublished">${formattedDate}</time>
+                            <time datetime="${publishDate}" itemprop="datePublished"></time>
                             <span itemprop="author"></span>
                         </div>
                         <div itemprop="content"></div>
@@ -264,15 +264,15 @@ fn test_memory_usage_with_large_templates() {
                     <div itemprop="widgets[]" class="widget">
                         <h3 itemprop="title"></h3>
                         <ul>
-                            <li itemprop="items[]">${name}: ${value}</li>
+                            <li itemprop="items[]"><span itemprop="name"></span>: <span itemprop="value"></span></li>
                         </ul>
                     </div>
                 </aside>
                 
                 <footer>
-                    <p>${copyright}</p>
+                    <p itemprop="copyright"></p>
                     <div itemprop="links[]">
-                        <a href="${url}" itemprop="text">${text}</a>
+                        <a href="${url}" itemprop="text"></a>
                     </div>
                 </footer>
             </div>

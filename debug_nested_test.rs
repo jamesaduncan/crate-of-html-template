@@ -19,8 +19,6 @@ fn main() {
     "#;
 
     let template = HtmlTemplate::from_str(html, None).unwrap();
-    
-    // Test with sample data
     let data = json!({
         "categories": [
             {
@@ -28,13 +26,25 @@ fn main() {
                 "description": "Latest gadgets and devices",
                 "items": [
                     {"title": "Laptop", "price": "$999"},
-                    {"title": "Phone", "price": "$599"}
+                    {"title": "Phone", "price": "$699"}
+                ]
+            },
+            {
+                "name": "Books",
+                "description": "Educational and fiction books",
+                "items": [
+                    {"title": "Rust Programming", "price": "$45"}
                 ]
             }
         ]
     });
-    
+
     let result = template.render(&data).unwrap();
-    println!("Rendered template:");
+    println!("Rendered output:");
     println!("{}", result);
+    
+    println!("\nLooking for 'Laptop': {}", result.contains("Laptop"));
+    println!("Looking for 'Electronics': {}", result.contains("Electronics"));
+    println!("Number of <li> elements: {}", result.matches("<li").count());
+    println!("Number of category sections: {}", result.matches(r#"class="category""#).count());
 }

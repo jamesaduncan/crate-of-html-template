@@ -181,13 +181,17 @@ impl Parser {
                 is_array: false,
                 target: PropertyTarget::TextContent,
                 variables: if text_variables.is_empty() {
-                    // Create an implicit variable binding
-                    // For itemprop names, treat the entire name as a single property
-                    // (don't split on dots like we do for ${var.path} variables)
-                    vec![Variable {
-                        path: vec![prop_name.to_string()],
-                        raw: format!("${{{}}}", prop_name),
-                    }]
+                    // Only skip implicit variables for multi-line whitespace (HTML formatting)
+                    // Single-line empty or short whitespace should still get implicit binding
+                    if text.trim().is_empty() && text.contains('\n') && text.len() > 10 {
+                        vec![] // Empty variables for direct property binding (whitespace from HTML formatting)
+                    } else {
+                        // Create implicit binding for intentionally empty elements or short whitespace
+                        vec![Variable {
+                            path: vec![prop_name.to_string()],
+                            raw: format!("${{{}}}", prop_name),
+                        }]
+                    }
                 } else {
                     text_variables
                 },
@@ -223,10 +227,7 @@ impl Parser {
                     name: prop_name.to_string(),
                     is_array: false,
                     target: PropertyTarget::Value,
-                    variables: vec![Variable {
-                        path: vec![prop_name.to_string()],
-                        raw: format!("${{{}}}", prop_name),
-                    }],
+                    variables: vec![], // Empty variables for implicit binding
                 });
             }
         }
@@ -250,10 +251,7 @@ impl Parser {
                     name: prop_name.to_string(),
                     is_array: false,
                     target: PropertyTarget::TextContent,
-                    variables: vec![Variable {
-                        path: vec![prop_name.to_string()],
-                        raw: format!("${{{}}}", prop_name),
-                    }],
+                    variables: vec![], // Empty variables for implicit binding
                 });
             }
         }
@@ -353,7 +351,16 @@ impl Parser {
     }
 
     fn generate_selector(&self, element: &dom_query::Node) -> Result<String> {
-        // Generate a unique CSS selector for this element
+        // Generate a CSS selector for this element
+        // For elements with itemprop, we only need the itemprop selector
+        // This makes the selector more flexible and works across different DOM contexts
+        
+        if let Some(itemprop) = element.attr("itemprop") {
+            // For itemprop elements, just use the attribute selector
+            return Ok(format!("[itemprop=\"{}\"]", itemprop));
+        }
+        
+        // For elements without itemprop, build a more specific selector
         let mut selector_parts = Vec::new();
 
         // Add tag name
@@ -371,11 +378,6 @@ impl Parser {
             for class in classes.split_whitespace() {
                 selector_parts.push(format!(".{}", class));
             }
-        }
-
-        // Add itemprop as attribute selector
-        if let Some(itemprop) = element.attr("itemprop") {
-            selector_parts.push(format!("[itemprop=\"{}\"]", itemprop));
         }
 
         // Add data-constraint as attribute selector

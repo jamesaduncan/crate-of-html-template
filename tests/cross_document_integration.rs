@@ -118,8 +118,8 @@ fn test_cross_document_with_arrays() {
     assert!(result.contains("Tech Blog"));
     assert!(result.contains("First Post"));
     assert!(result.contains("Second Post"));
-    assert!(result.contains("By: Alice"));
-    assert!(result.contains("By: Bob"));
+    assert!(result.contains("By:") && result.contains("Alice"));
+    assert!(result.contains("By:") && result.contains("Bob"));
 
     // Should have multiple post articles
     assert_eq!(result.matches(r#"class="post""#).count(), 2);

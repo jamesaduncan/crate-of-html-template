@@ -1,32 +1,34 @@
-use dom_query::Document;
+use html_template::HtmlTemplate;
+use serde_json::json;
 
 fn main() {
-    let html = r#"<p>Email: <a href="mailto:${email}" itemprop="email"></a></p>"#;
+    let html = r#"
+        <template>
+            <article class="blog-post">
+                <div itemprop="content" class="content">
+                </div>
+            </article>
+        </template>
+    "#;
 
-    let doc = Document::from(html);
-
-    // Check the p element
-    let p = doc.select("p");
-    println!("P element HTML: {}", p.html());
-    println!("P element text: '{}'", p.text());
-    println!("P element inner HTML: {}", p.inner_html());
-
-    // Check the anchor
-    let a = doc.select("a");
-    println!("\nA element HTML: {}", a.html());
-    println!("A element text: '{}'", a.text());
-    println!("A element href: {:?}", a.attr("href"));
-
-    // Test what happens when we process the template
-    println!("\n--- Processing test ---");
-
-    // Process href attribute
-    a.set_attr("href", "mailto:alice@example.com");
-    println!("After setting href: {}", a.html());
-
-    // Process text content
-    a.set_text("alice@example.com");
-    println!("After setting text: {}", a.html());
-
-    println!("\nFinal P element: {}", p.html());
+    let template = HtmlTemplate::from_str(html, Some("article")).unwrap();
+    
+    let data = json!({
+        "content": "This is a detailed post about Rust templating..."
+    });
+    
+    let result = template.render(&data).unwrap();
+    println!("Result: {}", result);
+    
+    // Check if content is in the result
+    if result.contains("This is a detailed post") {
+        println!("✓ Content was properly bound!");
+    } else {
+        println!("✗ Content was NOT bound!");
+        
+        // Show what's actually in the div
+        let start = result.find("<div itemprop=\"content\"").unwrap_or(0);
+        let end = result[start..].find("</div>").unwrap_or(result.len() - start) + start + 6;
+        println!("Div content: {}", &result[start..end]);
+    }
 }

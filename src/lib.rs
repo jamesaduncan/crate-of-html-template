@@ -111,7 +111,7 @@
 //! - `itemscope` - Creates nested object scope
 //! - `itemtype="SchemaType"` - Specifies Schema.org type for validation
 //! - `data-constraint="expression"` - Conditional rendering
-//! - `${variable}` - Variable substitution in text and attributes
+//! - `${variable}` - Variable substitution in attributes ONLY
 //!
 //! ### Array Handling
 //!
@@ -328,32 +328,32 @@ mod lib_tests {
         let html = r#"
             <template>
                 <div>
-                    <h1>Welcome ${name}!</h1>
-                    <p>Your age is ${age} years old.</p>
-                    <span>Status: ${status}</span>
+                    <h1 itemprop="greeting"></h1>
+                    <p itemprop="ageInfo"></p>
+                    <span itemprop="status"></span>
                 </div>
             </template>
         "#;
 
         let data = json!({
-            "name": "Alice",
-            "age": 30,
-            "status": "active"
+            "greeting": "Welcome Alice!",
+            "ageInfo": "Your age is 30 years old.",
+            "status": "Active"
         });
 
         let result = render_string_with_selector(html, "div", &data).unwrap();
-        // This feature is not yet implemented - variables in non-itemprop elements don't get interpolated
+        // Properties are bound to elements with itemprop
         assert!(
-            result.contains("${name}"),
-            "Variables not interpolated in non-itemprop elements"
+            result.contains("Welcome Alice!"),
+            "Property should be bound to element"
         );
         assert!(
-            result.contains("${age}"),
-            "Variables not interpolated in non-itemprop elements"
+            result.contains("Your age is 30"),
+            "Property should be bound to element"
         );
         assert!(
-            result.contains("${status}"),
-            "Variables not interpolated in non-itemprop elements"
+            result.contains("Active"),
+            "Property should be bound to element"
         );
     }
 
